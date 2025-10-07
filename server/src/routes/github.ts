@@ -1,6 +1,9 @@
+// server/src/routes/github.ts
 import { Router, Request, Response } from 'express';
 import { body, param, validationResult } from 'express-validator';
 import { GitHubService } from '../services/GitHubService';
+import { authenticate, AuthRequest } from '../middleware/auth';
+import { userStorage } from '../storage/UserStorage';
 import crypto from 'crypto';
 
 const router = Router();
@@ -82,22 +85,45 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/v1/services/github/auth - Authenticate with GitHub OAuth2 token
-router.post('/auth', [
-  body('accessToken').isString().notEmpty().withMessage('Access token is required'),
-  body('userId').isString().notEmpty().withMessage('User ID is required')
-], handleValidationErrors, async (req: Request, res: Response) => {
+router.post('/auth', authenticate, [
+  body('accessToken').isString().notEmpty().withMessage('Access token is required')
+], handleValidationErrors, async (req: AuthRequest, res: Response) => {
   try {
-    const { accessToken, userId } = req.body;
+    const { accessToken } = req.body;
+    const userId = req.user!.id; // User ID from JWT token
 
     const success = await githubService.authenticate(userId, { accessToken });
 
     if (success) {
+      const user = userStorage.findById(userId);
+      if (user) {
+        try {
+          const response = await fetch('https://api.github.com/user', {
+            headers: {
+              'Authorization': `token ${accessToken}`,
+              'Accept': 'application/vnd.github.v3+json'
+            }
+          });
+          
+          if (response.ok) {
+            const githubUser: any = await response.json(); // ✅ Type explicite
+            userStorage.updateServices(userId, 'github', {
+              accessToken,
+              username: githubUser.login
+            });
+          } else {
+            userStorage.updateServices(userId, 'github', { accessToken });
+          }
+        } catch (error) {
+          console.error('Failed to fetch GitHub user info:', error);
+          userStorage.updateServices(userId, 'github', { accessToken });
+        }
+      }
+
       res.json({
         success: true,
         message: 'GitHub authentication successful',
-        service: 'github',
-        userId
+        service: 'github'
       });
     } else {
       res.status(401).json({
@@ -116,18 +142,21 @@ router.post('/auth', [
   }
 });
 
-// GET /api/v1/services/github/auth/:userId - Check authentication status
-router.get('/auth/:userId', [
-  param('userId').isString().notEmpty().withMessage('User ID is required')
-], handleValidationErrors, async (req: Request, res: Response) => {
+// GET /api/v1/services/github/auth - Check authentication status (PROTECTED)
+router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user!.id;
     const isAuthenticated = await githubService.isAuthenticated(userId);
+
+    // Get additional info from user storage
+    const user = userStorage.findById(userId);
+    const githubData = user?.services.github;
 
     res.json({
       authenticated: isAuthenticated,
       service: 'github',
-      userId
+      username: githubData?.username,
+      connectedAt: githubData?.connectedAt
     });
   } catch (error) {
     console.error('Failed to check GitHub authentication:', error);
@@ -135,18 +164,18 @@ router.get('/auth/:userId', [
   }
 });
 
-// POST /api/v1/services/github/actions/:actionId/listen - Start listening for an action
-router.post('/actions/:actionId/listen', [
+// POST /api/v1/services/github/actions/:actionId/listen - Start listening for an action (PROTECTED)
+router.post('/actions/:actionId/listen', authenticate, [
   param('actionId').isIn(['new_issue_created', 'pull_request_opened', 'commit_pushed', 'repository_starred'])
     .withMessage('Invalid action ID'),
-  body('userId').isString().notEmpty().withMessage('User ID is required'),
   body('parameters').isObject().withMessage('Parameters object is required')
-], handleValidationErrors, async (req: Request, res: Response) => {
+], handleValidationErrors, async (req: AuthRequest, res: Response) => {
   try {
     const { actionId } = req.params;
-    const { userId, parameters } = req.body;
+    const { parameters } = req.body;
+    const userId = req.user!.id;
 
-    // Validate user is authenticated
+    // Validate user is authenticated with GitHub
     const isAuthenticated = await githubService.isAuthenticated(userId);
     if (!isAuthenticated) {
       return res.status(401).json({
@@ -183,15 +212,15 @@ router.post('/actions/:actionId/listen', [
   }
 });
 
-// DELETE /api/v1/services/github/actions/:actionId/listen - Stop listening for an action
-router.delete('/actions/:actionId/listen', [
+// DELETE /api/v1/services/github/actions/:actionId/listen - Stop listening for an action (PROTECTED)
+router.delete('/actions/:actionId/listen', authenticate, [
   param('actionId').isIn(['new_issue_created', 'pull_request_opened', 'commit_pushed', 'repository_starred'])
     .withMessage('Invalid action ID'),
-  body('userId').isString().notEmpty().withMessage('User ID is required')
-], handleValidationErrors, async (req: Request, res: Response) => {
+  body('parameters').optional().isObject().withMessage('Parameters must be an object')
+], handleValidationErrors, async (req: AuthRequest, res: Response) => {
   try {
     const { actionId } = req.params;
-    const { userId } = req.body;
+    const userId = req.user!.id;
 
     await githubService.stopListening(userId, actionId);
 
@@ -207,19 +236,19 @@ router.delete('/actions/:actionId/listen', [
   }
 });
 
-// POST /api/v1/services/github/reactions/:reactionId/execute - Execute a GitHub reaction
-router.post('/reactions/:reactionId/execute', [
+// POST /api/v1/services/github/reactions/:reactionId/execute - Execute a GitHub reaction (PROTECTED)
+router.post('/reactions/:reactionId/execute', authenticate, [
   param('reactionId').isIn(['create_issue', 'comment_on_issue', 'create_repository'])
     .withMessage('Invalid reaction ID'),
-  body('userId').isString().notEmpty().withMessage('User ID is required'),
   body('parameters').isObject().withMessage('Parameters object is required'),
   body('triggerData').optional().isObject().withMessage('Trigger data must be an object')
-], handleValidationErrors, async (req: Request, res: Response) => {
+], handleValidationErrors, async (req: AuthRequest, res: Response) => {
   try {
     const { reactionId } = req.params;
-    const { userId, parameters, triggerData = {} } = req.body;
+    const { parameters, triggerData = {} } = req.body;
+    const userId = req.user!.id;
 
-    // Validate user is authenticated
+    // Validate user is authenticated with GitHub
     const isAuthenticated = await githubService.isAuthenticated(userId);
     if (!isAuthenticated) {
       return res.status(401).json({
@@ -259,7 +288,7 @@ router.post('/reactions/:reactionId/execute', [
   }
 });
 
-// POST /api/v1/services/github/webhook - GitHub webhook endpoint
+// POST /api/v1/services/github/webhook - GitHub webhook endpoint (PUBLIC)
 router.post('/webhook', verifyGitHubWebhook, async (req: Request, res: Response) => {
   try {
     const eventType = req.get('X-GitHub-Event');
@@ -269,7 +298,7 @@ router.post('/webhook', verifyGitHubWebhook, async (req: Request, res: Response)
       return res.status(400).json({ error: 'Missing event type header' });
     }
 
-    console.log(`Received GitHub webhook: ${eventType}`);
+    console.log(`📥 Received GitHub webhook: ${eventType}`);
     
     // Handle the webhook event
     await githubService.handleWebhookEvent(eventType, payload);
@@ -315,9 +344,8 @@ router.post('/webhook', verifyGitHubWebhook, async (req: Request, res: Response)
   }
 });
 
-// GET /api/v1/services/github/oauth/url - Get GitHub OAuth URL
+// GET /api/v1/services/github/oauth/url - Get GitHub OAuth URL (PUBLIC)
 router.get('/oauth/url', [
-  body('userId').optional().isString().withMessage('User ID must be a string'),
   body('redirectUri').optional().isString().withMessage('Redirect URI must be a string')
 ], handleValidationErrors, async (req: Request, res: Response) => {
   try {

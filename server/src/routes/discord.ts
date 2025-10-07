@@ -1,6 +1,9 @@
+// server/src/routes/discord.ts
 import { Router, Request, Response } from 'express';
 import { body, param, validationResult } from 'express-validator';
 import { DiscordService } from '../services/DiscordService';
+import { authenticate, AuthRequest } from '../middleware/auth';
+import { userStorage } from '../storage/UserStorage';
 
 const router = Router();
 const discordService = new DiscordService();
@@ -38,23 +41,28 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/v1/services/discord/auth - Authenticate with Discord Bot Token
-router.post('/auth', [
+// POST /api/v1/services/discord/auth - Authenticate with Discord Bot Token (PROTECTED)
+router.post('/auth', authenticate, [
   body('botToken').isString().notEmpty().withMessage('Bot token is required'),
-  body('guildId').isString().notEmpty().withMessage('Guild ID is required'),
-  body('userId').isString().notEmpty().withMessage('User ID is required')
-], handleValidationErrors, async (req: Request, res: Response) => {
+  body('guildId').isString().notEmpty().withMessage('Guild ID is required')
+], handleValidationErrors, async (req: AuthRequest, res: Response) => {
   try {
-    const { botToken, guildId, userId } = req.body;
+    const { botToken, guildId } = req.body;
+    const userId = req.user!.id; // User ID from JWT token
 
     const success = await discordService.authenticate(userId, { botToken, guildId });
 
     if (success) {
+      // Update user storage with Discord connection
+      userStorage.updateServices(userId, 'discord', {
+        botToken,
+        guildId
+      });
+
       res.json({
         success: true,
         message: 'Discord authentication successful',
-        service: 'discord',
-        userId
+        service: 'discord'
       });
     } else {
       res.status(401).json({
@@ -73,18 +81,21 @@ router.post('/auth', [
   }
 });
 
-// GET /api/v1/services/discord/auth/:userId - Check authentication status
-router.get('/auth/:userId', [
-  param('userId').isString().notEmpty().withMessage('User ID is required')
-], handleValidationErrors, async (req: Request, res: Response) => {
+// GET /api/v1/services/discord/auth - Check authentication status (PROTECTED)
+router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user!.id;
     const isAuthenticated = await discordService.isAuthenticated(userId);
+
+    // Get additional info from user storage
+    const user = userStorage.findById(userId);
+    const discordData = user?.services.discord;
 
     res.json({
       authenticated: isAuthenticated,
       service: 'discord',
-      userId
+      guildId: discordData?.guildId,
+      connectedAt: discordData?.connectedAt
     });
   } catch (error) {
     console.error('Failed to check Discord authentication:', error);
@@ -92,18 +103,18 @@ router.get('/auth/:userId', [
   }
 });
 
-// POST /api/v1/services/discord/actions/:actionId/listen - Start listening for an action
-router.post('/actions/:actionId/listen', [
+// POST /api/v1/services/discord/actions/:actionId/listen - Start listening for an action (PROTECTED)
+router.post('/actions/:actionId/listen', authenticate, [
   param('actionId').isIn(['message_posted_in_channel', 'user_mentioned', 'user_joined_server'])
     .withMessage('Invalid action ID'),
-  body('userId').isString().notEmpty().withMessage('User ID is required'),
   body('parameters').isObject().withMessage('Parameters object is required')
-], handleValidationErrors, async (req: Request, res: Response) => {
+], handleValidationErrors, async (req: AuthRequest, res: Response) => {
   try {
     const { actionId } = req.params;
-    const { userId, parameters } = req.body;
+    const { parameters } = req.body;
+    const userId = req.user!.id;
 
-    // Validate user is authenticated
+    // Validate user is authenticated with Discord
     const isAuthenticated = await discordService.isAuthenticated(userId);
     if (!isAuthenticated) {
       return res.status(401).json({
@@ -136,15 +147,15 @@ router.post('/actions/:actionId/listen', [
   }
 });
 
-// DELETE /api/v1/services/discord/actions/:actionId/listen - Stop listening for an action
-router.delete('/actions/:actionId/listen', [
+// DELETE /api/v1/services/discord/actions/:actionId/listen - Stop listening for an action (PROTECTED)
+router.delete('/actions/:actionId/listen', authenticate, [
   param('actionId').isIn(['message_posted_in_channel', 'user_mentioned', 'user_joined_server'])
     .withMessage('Invalid action ID'),
-  body('userId').isString().notEmpty().withMessage('User ID is required')
-], handleValidationErrors, async (req: Request, res: Response) => {
+  body('parameters').optional().isObject().withMessage('Parameters must be an object')
+], handleValidationErrors, async (req: AuthRequest, res: Response) => {
   try {
     const { actionId } = req.params;
-    const { userId } = req.body;
+    const userId = req.user!.id;
 
     await discordService.stopListening(userId, actionId);
 
@@ -160,19 +171,19 @@ router.delete('/actions/:actionId/listen', [
   }
 });
 
-// POST /api/v1/services/discord/reactions/:reactionId/execute - Execute a Discord reaction
-router.post('/reactions/:reactionId/execute', [
+// POST /api/v1/services/discord/reactions/:reactionId/execute - Execute a Discord reaction (PROTECTED)
+router.post('/reactions/:reactionId/execute', authenticate, [
   param('reactionId').isIn(['send_message_to_channel', 'send_dm', 'add_role_to_user'])
     .withMessage('Invalid reaction ID'),
-  body('userId').isString().notEmpty().withMessage('User ID is required'),
   body('parameters').isObject().withMessage('Parameters object is required'),
   body('triggerData').optional().isObject().withMessage('Trigger data must be an object')
-], handleValidationErrors, async (req: Request, res: Response) => {
+], handleValidationErrors, async (req: AuthRequest, res: Response) => {
   try {
     const { reactionId } = req.params;
-    const { userId, parameters, triggerData = {} } = req.body;
+    const { parameters, triggerData = {} } = req.body;
+    const userId = req.user!.id;
 
-    // Validate user is authenticated
+    // Validate user is authenticated with Discord
     const isAuthenticated = await discordService.isAuthenticated(userId);
     if (!isAuthenticated) {
       return res.status(401).json({
@@ -212,14 +223,12 @@ router.post('/reactions/:reactionId/execute', [
   }
 });
 
-// GET /api/v1/services/discord/guilds - Get available guilds (requires authentication)
-router.get('/guilds/:userId', [
-  param('userId').isString().notEmpty().withMessage('User ID is required')
-], handleValidationErrors, async (req: Request, res: Response) => {
+// GET /api/v1/services/discord/guilds - Get available guilds (PROTECTED)
+router.get('/guilds', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const { userId } = req.params;
+    const userId = req.user!.id;
 
-    // Validate user is authenticated
+    // Validate user is authenticated with Discord
     const isAuthenticated = await discordService.isAuthenticated(userId);
     if (!isAuthenticated) {
       return res.status(401).json({
@@ -229,10 +238,26 @@ router.get('/guilds/:userId', [
     }
 
     // This is a simplified version - in reality, you'd fetch guilds from the Discord client
-    res.json({
-      guilds: [],
-      message: 'Guild fetching not implemented in this basic version. Use Discord Developer Portal to get Guild IDs.'
-    });
+    // For now, return the configured guild from user storage
+    const user = userStorage.findById(userId);
+    const discordData = user?.services.discord;
+
+    if (discordData?.guildId) {
+      res.json({
+        guilds: [
+          {
+            id: discordData.guildId,
+            name: 'Connected Server',
+            connected: true
+          }
+        ]
+      });
+    } else {
+      res.json({
+        guilds: [],
+        message: 'No guilds connected. Please authenticate with Discord first.'
+      });
+    }
   } catch (error) {
     console.error('Failed to get Discord guilds:', error);
     res.status(500).json({ error: 'Internal server error' });
