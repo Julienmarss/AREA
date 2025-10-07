@@ -69,10 +69,10 @@ services:
       dockerfile: Dockerfile
     container_name: area_mobile_builder
     volumes:
-      - mobile_apk:/app/android/app/build/outputs/apk
+      - mobile_apk:/app/build
     networks:
       - area_network
-    command: /bin/sh -c "npm install && cd android && ./gradlew assembleRelease && cp app/build/outputs/apk/release/app-release.apk /app/android/app/build/outputs/apk/client.apk"
+    command: /bin/sh -c "flutter pub get && flutter build apk --release && flutter build web --release"
 
   # Web Client
   client_web:

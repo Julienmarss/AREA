@@ -107,17 +107,20 @@ npm run dev
 - `npm run preview` - Preview production build
 - `npm run lint` - Run ESLint
 
-### Mobile (React Native)
+### Mobile (Flutter)
 
 ```bash
 cd mobile
-npm install
+flutter pub get
 
-# Android
-npm run android
+# Run on device/emulator
+flutter run
 
 # Build APK
-cd android && ./gradlew assembleRelease
+flutter build apk --release
+
+# Build Web
+flutter build web --release
 ```
 
 ## 🔧 Tech Stack
@@ -140,10 +143,11 @@ cd android && ./gradlew assembleRelease
 - **Router:** React Router v6
 
 ### Mobile
-- **Framework:** React Native 0.73
-- **Platform:** Android
-- **Navigation:** React Navigation
-- **HTTP Client:** Axios
+- **Framework:** Flutter 3.x
+- **Platform:** Android, iOS, Web
+- **Language:** Dart
+- **State Management:** Provider/Riverpod
+- **HTTP Client:** Dio
 
 ### DevOps
 - **Containerization:** Docker + Docker Compose

@@ -3,8 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import path from 'path';
 
-dotenv.config();
+// Configure dotenv to load .env from project root
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -15,6 +17,10 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:8081',
   credentials: true
 }));
+// Raw body middleware for webhook signature verification
+app.use('/api/v1/services/github/webhook', express.raw({ type: 'application/json' }));
+
+// Regular JSON middleware for other routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
@@ -223,7 +229,14 @@ app.get('/about.json', (req: Request, res: Response) => {
   });
 });
 
-// API Routes (to be implemented)
+// Import routes
+import discordRoutes from './routes/discord';
+import githubRoutes from './routes/github';
+
+// Import middleware
+import { setupAutoReactions } from './middleware/autoReactions';
+
+// API Routes
 app.get('/api/v1', (req: Request, res: Response) => {
   res.json({
     message: 'AREA API v1',
@@ -236,6 +249,10 @@ app.get('/api/v1', (req: Request, res: Response) => {
     }
   });
 });
+
+// Service routes
+app.use('/api/v1/services/discord', discordRoutes);
+app.use('/api/v1/services/github', githubRoutes);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -260,4 +277,8 @@ app.listen(PORT, () => {
   console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 API: http://localhost:${PORT}`);
   console.log(`📄 About: http://localhost:${PORT}/about.json`);
+  
+  // Initialize Discord bot and auto-reactions
+  console.log('🤖 Initializing Discord bot and auto-reactions...');
+  setupAutoReactions();
 });

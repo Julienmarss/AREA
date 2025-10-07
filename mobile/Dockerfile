@@ -1,16 +1,24 @@
-FROM reactnativecommunity/react-native-android:latest
+# Use the official Flutter image
+FROM ghcr.io/cirruslabs/flutter:stable
 
+# Set working directory
 WORKDIR /app
 
-# Install dependencies
-COPY package.json package-lock.json* ./
-RUN npm install
+# Copy pubspec files
+COPY pubspec.yaml pubspec.lock ./
 
-# Copy project files
+# Get dependencies
+RUN flutter pub get
+
+# Copy source code
 COPY . .
 
-# Build Android APK
-RUN cd android && chmod +x gradlew && ./gradlew assembleRelease
+# Build the app for web
+RUN flutter build web
 
-# Copy APK to shared volume
-CMD ["sh", "-c", "cp android/app/build/outputs/apk/release/app-release.apk /app/client.apk && echo 'APK built successfully'"]
+# Expose port
+EXPOSE 8080
+
+# Start the app
+CMD ["flutter", "run", "-d", "web-server", "--web-port", "8080", "--web-hostname", "0.0.0.0"]
+

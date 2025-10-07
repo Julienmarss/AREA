@@ -43,3 +43,10 @@ mobile/ios/build/
 *.pem
 .vercel
 .railway
+
+# Autres lockfiles
+yarn.lock
+pnpm-lock.yaml
+Thumbs.db
+ehthumbs.db
+Desktop.ini
