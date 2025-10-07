@@ -16,7 +16,7 @@ dotenv.config({ path: path.join(__dirname, '../../.env') });
 const GITHUB_CONFIG = {
   OWNER: 'JusyMathis',
   REPO: 'AREA-TEST',
-  TOKEN: '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'
+  TOKEN: ''
 };
 
 console.log('🔧 GitHub Config:', {

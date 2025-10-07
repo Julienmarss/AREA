@@ -3,7 +3,7 @@ import { discordCommands, handleSlashCommand } from '../commands/discordCommands
 
 // Configuration des réactions automatiques
 const DISCORD_CONFIG = {
-  BOT_TOKEN: 'MTQyMjk4MzUwNTcxNzEwNDczMQ.GzSJKO.8igBr5jiyDfJDkGLKao8h1bFw8sqBO0sqZiUJA',
+  BOT_TOKEN: '',
   CHANNEL_ID: '1422636117118681251'
 };
 
