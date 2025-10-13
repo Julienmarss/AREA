@@ -14,15 +14,14 @@ import path from 'path';
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 const GITHUB_CONFIG = {
-  OWNER: 'JusyMathis',
-  REPO: 'AREA-TEST',
-  TOKEN: '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'
+  OWNER: process.env.GITHUB_OWNER,
+  REPO: process.env.GITHUB_REPO,
+  TOKEN: process.env.GITHUB_TOKEN
 };
 
 console.log('🔧 GitHub Config:', {
   OWNER: GITHUB_CONFIG.OWNER,
   REPO: GITHUB_CONFIG.REPO,
-  TOKEN: 'SET'
 });
 
 const githubService = new GitHubService();

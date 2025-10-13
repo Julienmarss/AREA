@@ -6,6 +6,8 @@ import Home from './pages/Home';
 import Register from './pages/Register';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Services from './pages/Services';
+import CreateArea from './pages/areas/CreateArea';
 
 function App() {
   return (
@@ -28,11 +30,23 @@ function App() {
               } 
             />
 
-            {/* Redirect /services to dashboard for now */}
-            <Route path="/services" element={<Navigate to="/dashboard" replace />} />
-            
-            {/* Redirect /areas/* to dashboard for now */}
-            <Route path="/areas/*" element={<Navigate to="/dashboard" replace />} />
+            <Route 
+              path="/services" 
+              element={
+                <ProtectedRoute>
+                  <Services />
+                </ProtectedRoute>
+              } 
+            />
+
+            <Route 
+              path="/areas/create" 
+              element={
+                <ProtectedRoute>
+                  <CreateArea />
+                </ProtectedRoute>
+              } 
+            />
 
             {/* 404 */}
             <Route path="*" element={<Navigate to="/" replace />} />

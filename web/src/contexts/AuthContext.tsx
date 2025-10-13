@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { authAPI } from '../services/api';
 
 interface User {
   id: string;
@@ -18,8 +19,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -36,20 +35,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchUser = async (authToken: string) => {
     try {
-      const response = await fetch(`${API_URL}/api/v1/auth/me`, {
-        headers: {
-          'Authorization': `Bearer ${authToken}`
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.user);
-        setToken(authToken);
-      } else {
-        // Token invalide
-        localStorage.removeItem('area_token');
-      }
+      const data = await authAPI.me();
+      setUser(data.user);
+      setToken(authToken);
     } catch (error) {
       console.error('Failed to fetch user:', error);
       localStorage.removeItem('area_token');
@@ -59,41 +47,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const register = async (email: string, password: string, firstName: string, lastName: string) => {
-    const response = await fetch(`${API_URL}/api/v1/auth/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, firstName, lastName })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Registration failed');
+    try {
+      const data = await authAPI.register(email, password, firstName, lastName);
+      
+      // Sauvegarder le token et l'utilisateur
+      localStorage.setItem('area_token', data.token);
+      setToken(data.token);
+      setUser(data.user);
+    } catch (error) {
+      console.error('Registration error:', error);
+      throw error;
     }
-
-    // Sauvegarder le token et l'utilisateur
-    localStorage.setItem('area_token', data.token);
-    setToken(data.token);
-    setUser(data.user);
   };
 
   const login = async (email: string, password: string) => {
-    const response = await fetch(`${API_URL}/api/v1/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || 'Login failed');
+    try {
+      const data = await authAPI.login(email, password);
+      
+      // Sauvegarder le token et l'utilisateur
+      localStorage.setItem('area_token', data.token);
+      setToken(data.token);
+      setUser(data.user);
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
     }
-
-    // Sauvegarder le token et l'utilisateur
-    localStorage.setItem('area_token', data.token);
-    setToken(data.token);
-    setUser(data.user);
   };
 
   const logout = () => {
