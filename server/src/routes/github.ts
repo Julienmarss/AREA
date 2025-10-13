@@ -6,9 +6,14 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 import { userStorage } from '../storage/UserStorage';
 import { AreaExecutor } from '../services/AreaExecutor';
 import crypto from 'crypto';
+import { GitHubController } from '../controllers/github.controller';
 
 const router = Router();
 const githubService = new GitHubService();
+
+router.get('/oauth/authorize', GitHubController.initiateAuth);
+router.get('/oauth/callback', GitHubController.callback);
+router.get('/oauth/status', GitHubController.checkStatus);
 
 const handleValidationErrors = (req: Request, res: Response, next: any) => {
   const errors = validationResult(req);
