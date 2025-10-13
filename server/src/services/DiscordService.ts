@@ -1,23 +1,19 @@
-import { Client, GatewayIntentBits, Message, GuildMember, TextChannel, User, Guild, EmbedBuilder, PermissionsBitField } from 'discord.js';
+// server/src/services/DiscordService.ts
+import { Client, GatewayIntentBits, Message, GuildMember, TextChannel, User, Guild, EmbedBuilder } from 'discord.js';
 import { ServiceBase } from './base/ServiceBase';
 import { AreaExecutor } from './AreaExecutor';
-import { ServiceConfig, ActionConfig, ReactionConfig, ActionTriggerEvent } from '../types/area';
+import { ServiceConfig, ActionConfig, ReactionConfig } from '../types/area';
 import {
   DiscordMessage,
   DiscordUser,
   DiscordGuild,
   DiscordChannel,
-  MessagePostedTriggerData,
-  UserMentionedTriggerData,
-  UserJoinedServerTriggerData,
-  SendMessageParameters,
-  SendDMParameters,
-  AddRoleParameters,
   DiscordAuthData
 } from '../types/discord';
 
 export class DiscordService extends ServiceBase {
-  private client: Client;
+  // Map pour stocker un client Discord par utilisateur
+  private userClients: Map<string, Client> = new Map();
   private activeListeners: Map<string, { userId: string; actionId: string; parameters: any }> = new Map();
 
   constructor() {
@@ -30,18 +26,6 @@ export class DiscordService extends ServiceBase {
     };
 
     super(config);
-
-    this.client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.DirectMessages
-      ]
-    });
-
-    this.setupEventHandlers();
   }
 
   getActions(): ActionConfig[] {
@@ -64,13 +48,6 @@ export class DiscordService extends ServiceBase {
             required: false,
             description: 'Optional keyword filter',
             placeholder: 'urgent'
-          },
-          {
-            name: 'authorId',
-            type: 'string',
-            required: false,
-            description: 'Optional specific author ID',
-            placeholder: '123456789012345678'
           }
         ]
       },
@@ -84,13 +61,6 @@ export class DiscordService extends ServiceBase {
             type: 'string',
             required: true,
             description: 'ID of the user to monitor mentions for',
-            placeholder: '123456789012345678'
-          },
-          {
-            name: 'channelId',
-            type: 'string',
-            required: false,
-            description: 'Optional specific channel ID',
             placeholder: '123456789012345678'
           }
         ]
@@ -132,20 +102,6 @@ export class DiscordService extends ServiceBase {
             required: true,
             description: 'Message content to send',
             placeholder: 'Hello from AREA!'
-          },
-          {
-            name: 'embedTitle',
-            type: 'string',
-            required: false,
-            description: 'Optional embed title',
-            placeholder: 'Alert'
-          },
-          {
-            name: 'embedDescription',
-            type: 'string',
-            required: false,
-            description: 'Optional embed description',
-            placeholder: 'This is an automated message'
           }
         ]
       },
@@ -203,44 +159,65 @@ export class DiscordService extends ServiceBase {
 
   async authenticate(userId: string, authData: { botToken: string; guildId: string }): Promise<boolean> {
     try {
-      // Check if client is already logged in with the same token
-      if (this.client.isReady()) {
-        const currentToken = this.client.token;
-        if (currentToken === authData.botToken) {
-          // Already authenticated with this token, just store user data
-          const discordAuthData: DiscordAuthData = {
-            botToken: authData.botToken,
-            guildId: authData.guildId,
-            permissions: ['SEND_MESSAGES', 'MANAGE_ROLES', 'VIEW_CHANNELS'],
-            connectedAt: new Date()
-          };
-
-          this.setAuthData(userId, {
-            userId,
-            serviceId: 'discord',
-            accessToken: authData.botToken,
-            metadata: discordAuthData
-          });
-          return true;
-        } else {
-          // Need to login with new token
-          this.client.destroy();
-          this.client = new Client({
-            intents: [
-              GatewayIntentBits.Guilds,
-              GatewayIntentBits.GuildMessages,
-              GatewayIntentBits.GuildMembers,
-              GatewayIntentBits.MessageContent,
-              GatewayIntentBits.DirectMessages
-            ]
-          });
-          this.setupEventHandlers();
-        }
+      console.log(`🔐 Authenticating Discord for user ${userId}...`);
+      
+      // Déconnecter l'ancien client si existant
+      const existingClient = this.userClients.get(userId);
+      if (existingClient) {
+        console.log(`📤 Destroying existing Discord client for user ${userId}`);
+        existingClient.destroy();
+        this.userClients.delete(userId);
       }
 
-      // Login with bot token
-      await this.client.login(authData.botToken);
-      
+      // Créer un nouveau client pour cet utilisateur
+      const client = new Client({
+        intents: [
+          GatewayIntentBits.Guilds,
+          GatewayIntentBits.GuildMessages,
+          GatewayIntentBits.GuildMembers,
+          GatewayIntentBits.MessageContent,
+          GatewayIntentBits.DirectMessages
+        ]
+      });
+
+      // Configurer les event handlers pour ce client
+      this.setupClientEventHandlers(client, userId);
+
+      // Se connecter avec le token
+      console.log(`🔌 Connecting Discord bot for user ${userId}...`);
+      await client.login(authData.botToken);
+
+      // Attendre que le client soit prêt
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Discord client ready timeout'));
+        }, 15000); // 15 secondes
+
+        client.once('ready', () => {
+          clearTimeout(timeout);
+          console.log(`✅ Discord bot ready for user ${userId}: ${client.user?.tag}`);
+          resolve();
+        });
+
+        client.once('error', (error) => {
+          clearTimeout(timeout);
+          console.error(`❌ Discord client error for user ${userId}:`, error);
+          reject(error);
+        });
+      });
+
+      // Vérifier que le bot a accès au serveur
+      const guild = client.guilds.cache.get(authData.guildId);
+      if (!guild) {
+        throw new Error(`Bot is not in the server with ID ${authData.guildId}. Please invite the bot first.`);
+      }
+
+      console.log(`✅ Bot found in guild: ${guild.name}`);
+
+      // Stocker le client
+      this.userClients.set(userId, client);
+
+      // Stocker les données d'authentification
       const discordAuthData: DiscordAuthData = {
         botToken: authData.botToken,
         guildId: authData.guildId,
@@ -255,33 +232,50 @@ export class DiscordService extends ServiceBase {
         metadata: discordAuthData
       });
 
+      console.log(`✅ Discord authenticated successfully for user ${userId}`);
       return true;
-    } catch (error) {
-      console.error('Discord authentication failed:', error);
-      return false;
+
+    } catch (error: any) {
+      console.error(`❌ Discord authentication failed for user ${userId}:`, error.message);
+      
+      // Nettoyer en cas d'erreur
+      const client = this.userClients.get(userId);
+      if (client) {
+        client.destroy();
+        this.userClients.delete(userId);
+      }
+      
+      // Message d'erreur plus explicite
+      if (error.message.includes('disallowed intents')) {
+        throw new Error('Message Content Intent not enabled. Go to Discord Developer Portal > Bot > Privileged Gateway Intents > Enable "Message Content Intent"');
+      }
+      
+      throw error;
     }
   }
 
   async isAuthenticated(userId: string): Promise<boolean> {
+    const client = this.userClients.get(userId);
     const authData = this.getAuthData(userId);
-    return authData !== undefined && this.client.isReady();
+    return client?.isReady() === true && authData !== undefined;
   }
 
   async refreshAuth(userId: string): Promise<boolean> {
-    // Discord bot tokens don't expire, but we can check if the client is still connected
-    return this.client.isReady();
+    const client = this.userClients.get(userId);
+    return client?.isReady() === true;
   }
 
   async initialize(): Promise<void> {
-    console.log('Initializing Discord service...');
-    // The client will be logged in during authentication
+    console.log('Discord service initialized (multi-user support)');
   }
 
   async destroy(): Promise<void> {
-    console.log('Destroying Discord service...');
-    if (this.client) {
-      this.client.destroy();
+    console.log('Destroying all Discord clients...');
+    for (const [userId, client] of this.userClients.entries()) {
+      console.log(`Destroying Discord client for user ${userId}`);
+      client.destroy();
     }
+    this.userClients.clear();
     this.activeListeners.clear();
   }
 
@@ -292,7 +286,6 @@ export class DiscordService extends ServiceBase {
   }
 
   async stopListening(userId: string, actionId: string): Promise<void> {
-    // Remove all listeners for this user and action
     for (const [key, listener] of this.activeListeners.entries()) {
       if (listener.userId === userId && listener.actionId === actionId) {
         this.activeListeners.delete(key);
@@ -302,16 +295,22 @@ export class DiscordService extends ServiceBase {
   }
 
   async executeReaction(reactionId: string, userId: string, parameters: Record<string, any>, triggerData: Record<string, any>): Promise<boolean> {
+    const client = this.userClients.get(userId);
+    if (!client || !client.isReady()) {
+      console.error(`Discord client not ready for user ${userId}`);
+      return false;
+    }
+
     try {
       switch (reactionId) {
         case 'send_message_to_channel':
-          return await this.sendMessageToChannel(parameters);
+          return await this.sendMessageToChannel(client, parameters);
         
         case 'send_dm':
-          return await this.sendDirectMessage(parameters);
+          return await this.sendDirectMessage(client, parameters);
         
         case 'add_role_to_user':
-          return await this.addRoleToUser(parameters);
+          return await this.addRoleToUser(client, parameters);
         
         default:
           console.error(`Unknown Discord reaction: ${reactionId}`);
@@ -323,157 +322,74 @@ export class DiscordService extends ServiceBase {
     }
   }
 
-  private setupEventHandlers(): void {
-    this.client.on('ready', () => {
-      console.log(`Discord bot logged in as ${this.client.user?.tag}`);
+  private setupClientEventHandlers(client: Client, userId: string): void {
+    client.on('messageCreate', (message: Message) => {
+      if (message.author.bot) return;
+      this.handleMessageCreate(message, userId);
     });
 
-    this.client.on('messageCreate', (message: Message) => {
-      this.handleMessageCreate(message);
+    client.on('guildMemberAdd', (member: GuildMember) => {
+      this.handleGuildMemberAdd(member, userId);
     });
 
-    this.client.on('guildMemberAdd', (member: GuildMember) => {
-      this.handleGuildMemberAdd(member);
-    });
-  }
-
-private handleMessageCreate(message: Message): void {
-  if (message.author.bot) return;
-
-  const triggerData = {
-    message: this.convertToDiscordMessage(message),
-    channel: this.convertToDiscordChannel(message.channel as TextChannel),
-    author: this.convertToDiscordUser(message.author),
-    guild: message.guild ? this.convertToDiscordGuild(message.guild) : undefined
-  };
-
-  AreaExecutor.executeMatchingAreas('discord', 'message_posted_in_channel', triggerData)
-    .catch(err => console.error('Error executing AREAs for message:', err));
-
-  if (message.mentions.users.size > 0) {
-    message.mentions.users.forEach(mentionedUser => {
-      const mentionTriggerData = {
-        ...triggerData,
-        mentionedUser: this.convertToDiscordUser(mentionedUser),
-      };
-      AreaExecutor.executeMatchingAreas('discord', 'user_mentioned', mentionTriggerData)
-        .catch(err => console.error('Error executing AREAs for mention:', err));
+    client.on('error', (error) => {
+      console.error(`Discord client error for user ${userId}:`, error);
     });
   }
 
-  for (const [listenerId, listener] of this.activeListeners.entries()) {
-    if (listener.actionId === 'message_posted_in_channel') {
-      this.checkMessagePostedTrigger(message, listener);
-    } else if (listener.actionId === 'user_mentioned') {
-      this.checkUserMentionedTrigger(message, listener);
-    }
-  }
-}
-
-  private checkMessagePostedTrigger(message: Message, listener: { userId: string; actionId: string; parameters: any }): void {
-    const { channelId, keyword, authorId } = listener.parameters;
-
-    // Check channel match
-    if (channelId && message.channelId !== channelId) return;
-
-    // Check author match
-    if (authorId && message.author.id !== authorId) return;
-
-    // Check keyword match
-    if (keyword && !message.content.toLowerCase().includes(keyword.toLowerCase())) return;
-
-    // Trigger the action
-    const triggerData: MessagePostedTriggerData = {
+  private handleMessageCreate(message: Message, clientUserId: string): void {
+    const triggerData = {
       message: this.convertToDiscordMessage(message),
       channel: this.convertToDiscordChannel(message.channel as TextChannel),
       author: this.convertToDiscordUser(message.author),
       guild: message.guild ? this.convertToDiscordGuild(message.guild) : undefined
     };
 
-    this.emitActionTrigger({
-      serviceId: 'discord',
-      actionId: 'message_posted_in_channel',
-      userId: listener.userId,
-      data: triggerData,
-      timestamp: new Date()
-    });
-  }
+    AreaExecutor.executeMatchingAreas('discord', 'message_posted_in_channel', triggerData)
+      .catch(err => console.error('Error executing AREAs for message:', err));
 
-  private checkUserMentionedTrigger(message: Message, listener: { userId: string; actionId: string; parameters: any }): void {
-    const { userId, channelId } = listener.parameters;
-
-    // Check channel match if specified
-    if (channelId && message.channelId !== channelId) return;
-
-    // Check if the specified user is mentioned
-    if (!message.mentions.users.has(userId)) return;
-
-    const mentionedUser = message.mentions.users.get(userId);
-    if (!mentionedUser) return;
-
-    // Trigger the action
-    const triggerData: UserMentionedTriggerData = {
-      message: this.convertToDiscordMessage(message),
-      channel: this.convertToDiscordChannel(message.channel as TextChannel),
-      author: this.convertToDiscordUser(message.author),
-      mentionedUser: this.convertToDiscordUser(mentionedUser),
-      guild: message.guild ? this.convertToDiscordGuild(message.guild) : undefined
-    };
-
-    this.emitActionTrigger({
-      serviceId: 'discord',
-      actionId: 'user_mentioned',
-      userId: listener.userId,
-      data: triggerData,
-      timestamp: new Date()
-    });
-  }
-
-private handleGuildMemberAdd(member: GuildMember): void {
-  const triggerData = {
-    user: this.convertToDiscordUser(member.user),
-    guild: this.convertToDiscordGuild(member.guild),
-    joinedAt: member.joinedAt || new Date()
-  };
-
-  AreaExecutor.executeMatchingAreas('discord', 'user_joined_server', triggerData)
-    .catch(err => console.error('Error executing AREAs for member join:', err));
-
-  for (const [listenerId, listener] of this.activeListeners.entries()) {
-    if (listener.actionId === 'user_joined_server') {
-      const { guildId } = listener.parameters;
-      if (member.guild.id === guildId) {
-        this.emitActionTrigger({
-          serviceId: 'discord',
-          actionId: 'user_joined_server',
-          userId: listener.userId,
-          data: triggerData,
-          timestamp: new Date()
-        });
-      }
+    if (message.mentions.users.size > 0) {
+      message.mentions.users.forEach(mentionedUser => {
+        const mentionTriggerData = {
+          ...triggerData,
+          mentionedUser: this.convertToDiscordUser(mentionedUser),
+        };
+        AreaExecutor.executeMatchingAreas('discord', 'user_mentioned', mentionTriggerData)
+          .catch(err => console.error('Error executing AREAs for mention:', err));
+      });
     }
   }
-}
 
-  private async sendMessageToChannel(parameters: any): Promise<boolean> {
+  private handleGuildMemberAdd(member: GuildMember, clientUserId: string): void {
+    const triggerData = {
+      user: this.convertToDiscordUser(member.user),
+      guild: this.convertToDiscordGuild(member.guild),
+      joinedAt: member.joinedAt || new Date()
+    };
+
+    AreaExecutor.executeMatchingAreas('discord', 'user_joined_server', triggerData)
+      .catch(err => console.error('Error executing AREAs for member join:', err));
+  }
+
+  private async sendMessageToChannel(client: Client, parameters: any): Promise<boolean> {
     try {
-      const channel = await this.client.channels.fetch(parameters.channelId) as TextChannel;
+      const channel = await client.channels.fetch(parameters.channelId) as TextChannel;
       if (!channel) return false;
 
       const messageOptions: any = {
         content: parameters.content
       };
 
-      // Handle optional embed parameters
       if (parameters.embedTitle || parameters.embedDescription) {
         const embed = new EmbedBuilder();
         if (parameters.embedTitle) embed.setTitle(parameters.embedTitle);
         if (parameters.embedDescription) embed.setDescription(parameters.embedDescription);
-        embed.setColor(0x0099ff); // Default blue color
+        embed.setColor(0x0099ff);
         messageOptions.embeds = [embed];
       }
 
       await channel.send(messageOptions);
+      console.log(`✅ Message sent to channel ${parameters.channelId}`);
       return true;
     } catch (error) {
       console.error('Failed to send message to channel:', error);
@@ -481,12 +397,13 @@ private handleGuildMemberAdd(member: GuildMember): void {
     }
   }
 
-  private async sendDirectMessage(parameters: any): Promise<boolean> {
+  private async sendDirectMessage(client: Client, parameters: any): Promise<boolean> {
     try {
-      const user = await this.client.users.fetch(parameters.userId);
+      const user = await client.users.fetch(parameters.userId);
       if (!user) return false;
 
       await user.send(parameters.content);
+      console.log(`✅ DM sent to user ${parameters.userId}`);
       return true;
     } catch (error) {
       console.error('Failed to send direct message:', error);
@@ -494,9 +411,9 @@ private handleGuildMemberAdd(member: GuildMember): void {
     }
   }
 
-  private async addRoleToUser(parameters: any): Promise<boolean> {
+  private async addRoleToUser(client: Client, parameters: any): Promise<boolean> {
     try {
-      const guild = await this.client.guilds.fetch(parameters.guildId);
+      const guild = await client.guilds.fetch(parameters.guildId);
       if (!guild) return false;
 
       const member = await guild.members.fetch(parameters.userId);
@@ -506,6 +423,7 @@ private handleGuildMemberAdd(member: GuildMember): void {
       if (!role) return false;
 
       await member.roles.add(role);
+      console.log(`✅ Role ${parameters.roleId} added to user ${parameters.userId}`);
       return true;
     } catch (error) {
       console.error('Failed to add role to user:', error);
@@ -513,7 +431,6 @@ private handleGuildMemberAdd(member: GuildMember): void {
     }
   }
 
-  // Helper conversion methods
   private convertToDiscordMessage(message: Message): DiscordMessage {
     return {
       id: message.id,
