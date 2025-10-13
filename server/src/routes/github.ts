@@ -4,12 +4,12 @@ import { body, param, validationResult } from 'express-validator';
 import { GitHubService } from '../services/GitHubService';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { userStorage } from '../storage/UserStorage';
+import { AreaExecutor } from '../services/AreaExecutor';
 import crypto from 'crypto';
 
 const router = Router();
 const githubService = new GitHubService();
 
-// Middleware to check validation errors
 const handleValidationErrors = (req: Request, res: Response, next: any) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -21,7 +21,6 @@ const handleValidationErrors = (req: Request, res: Response, next: any) => {
   next();
 };
 
-// Middleware to verify GitHub webhook signature
 const verifyGitHubWebhook = (req: Request, res: Response, next: any) => {
   const signature = req.get('X-Hub-Signature-256');
   const secret = process.env.GITHUB_WEBHOOK_SECRET || 'default-webhook-secret';
@@ -30,12 +29,10 @@ const verifyGitHubWebhook = (req: Request, res: Response, next: any) => {
     return res.status(400).json({ error: 'Missing signature' });
   }
 
-  // Use the raw body buffer for signature verification
   let payload: string;
   if (Buffer.isBuffer(req.body)) {
     payload = req.body.toString('utf8');
   } else {
-    // Fallback for already parsed JSON (shouldn't happen with raw middleware)
     payload = JSON.stringify(req.body);
   }
 
@@ -44,8 +41,6 @@ const verifyGitHubWebhook = (req: Request, res: Response, next: any) => {
     .update(payload, 'utf8')
     .digest('hex')}`;
 
-  // Use crypto.timingSafeEqual for constant-time comparison to prevent timing attacks
-  // First check if lengths match to avoid RangeError
   if (signature.length !== expectedSignature.length) {
     return res.status(401).json({ error: 'Invalid signature' });
   }
@@ -54,7 +49,6 @@ const verifyGitHubWebhook = (req: Request, res: Response, next: any) => {
     return res.status(401).json({ error: 'Invalid signature' });
   }
 
-  // Parse the JSON body for the route handler
   try {
     req.body = JSON.parse(payload);
   } catch (error) {
@@ -64,7 +58,6 @@ const verifyGitHubWebhook = (req: Request, res: Response, next: any) => {
   next();
 };
 
-// GET /api/v1/services/github - Get GitHub service configuration
 router.get('/', async (req: Request, res: Response) => {
   try {
     const config = githubService.getConfig();
@@ -90,7 +83,7 @@ router.post('/auth', authenticate, [
 ], handleValidationErrors, async (req: AuthRequest, res: Response) => {
   try {
     const { accessToken } = req.body;
-    const userId = req.user!.id; // User ID from JWT token
+    const userId = req.user!.id;
 
     const success = await githubService.authenticate(userId, { accessToken });
 
@@ -106,7 +99,7 @@ router.post('/auth', authenticate, [
           });
           
           if (response.ok) {
-            const githubUser: any = await response.json(); // ✅ Type explicite
+            const githubUser: any = await response.json();
             userStorage.updateServices(userId, 'github', {
               accessToken,
               username: githubUser.login
@@ -142,13 +135,11 @@ router.post('/auth', authenticate, [
   }
 });
 
-// GET /api/v1/services/github/auth - Check authentication status (PROTECTED)
 router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     const isAuthenticated = await githubService.isAuthenticated(userId);
 
-    // Get additional info from user storage
     const user = userStorage.findById(userId);
     const githubData = user?.services.github;
 
@@ -164,7 +155,6 @@ router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /api/v1/services/github/actions/:actionId/listen - Start listening for an action (PROTECTED)
 router.post('/actions/:actionId/listen', authenticate, [
   param('actionId').isIn(['new_issue_created', 'pull_request_opened', 'commit_pushed', 'repository_starred'])
     .withMessage('Invalid action ID'),
@@ -175,7 +165,6 @@ router.post('/actions/:actionId/listen', authenticate, [
     const { parameters } = req.body;
     const userId = req.user!.id;
 
-    // Validate user is authenticated with GitHub
     const isAuthenticated = await githubService.isAuthenticated(userId);
     if (!isAuthenticated) {
       return res.status(401).json({
@@ -184,7 +173,6 @@ router.post('/actions/:actionId/listen', authenticate, [
       });
     }
 
-    // Validate action-specific parameters
     const validationError = validateActionParameters(actionId, parameters);
     if (validationError) {
       return res.status(400).json({
@@ -212,7 +200,6 @@ router.post('/actions/:actionId/listen', authenticate, [
   }
 });
 
-// DELETE /api/v1/services/github/actions/:actionId/listen - Stop listening for an action (PROTECTED)
 router.delete('/actions/:actionId/listen', authenticate, [
   param('actionId').isIn(['new_issue_created', 'pull_request_opened', 'commit_pushed', 'repository_starred'])
     .withMessage('Invalid action ID'),
@@ -236,7 +223,6 @@ router.delete('/actions/:actionId/listen', authenticate, [
   }
 });
 
-// POST /api/v1/services/github/reactions/:reactionId/execute - Execute a GitHub reaction (PROTECTED)
 router.post('/reactions/:reactionId/execute', authenticate, [
   param('reactionId').isIn(['create_issue', 'comment_on_issue', 'create_repository'])
     .withMessage('Invalid reaction ID'),
@@ -248,7 +234,6 @@ router.post('/reactions/:reactionId/execute', authenticate, [
     const { parameters, triggerData = {} } = req.body;
     const userId = req.user!.id;
 
-    // Validate user is authenticated with GitHub
     const isAuthenticated = await githubService.isAuthenticated(userId);
     if (!isAuthenticated) {
       return res.status(401).json({
@@ -257,7 +242,6 @@ router.post('/reactions/:reactionId/execute', authenticate, [
       });
     }
 
-    // Validate reaction-specific parameters
     const validationError = validateReactionParameters(reactionId, parameters);
     if (validationError) {
       return res.status(400).json({
@@ -288,7 +272,6 @@ router.post('/reactions/:reactionId/execute', authenticate, [
   }
 });
 
-// POST /api/v1/services/github/webhook - GitHub webhook endpoint (PUBLIC)
 router.post('/webhook', verifyGitHubWebhook, async (req: Request, res: Response) => {
   try {
     const eventType = req.get('X-GitHub-Event');
@@ -300,42 +283,13 @@ router.post('/webhook', verifyGitHubWebhook, async (req: Request, res: Response)
 
     console.log(`📥 Received GitHub webhook: ${eventType}`);
     
-    // Handle the webhook event
     await githubService.handleWebhookEvent(eventType, payload);
     
-    // AUTOMATIC REACTIONS: Handle issues and Pull Requests
-    setImmediate(async () => {
-      try {
-        const { setupAutoReactions } = await import('../middleware/autoReactions');
-        const autoReactions = setupAutoReactions();
-        
-        // Handle urgent issues
-        if (eventType === 'issues' && payload.action === 'opened') {
-          const labels = payload.issue?.labels || [];
-          const isUrgent = labels.some((label: any) => label.name.toLowerCase() === 'urgent');
-          
-          if (isUrgent) {
-            console.log('🚨 URGENT ISSUE DETECTED - Triggering Discord notification');
-            await autoReactions.handleUrgentIssue(eventType, payload);
-          }
-        }
-        
-        // Handle Pull Requests
-        if (eventType === 'pull_request' && payload.action === 'opened') {
-          console.log('🔄 PULL REQUEST DETECTED - Triggering Discord notification');
-          await autoReactions.handlePullRequest(eventType, payload);
-        }
-        
-        // Handle Comments on Issues and PRs
-        if (eventType === 'issue_comment' && payload.action === 'created') {
-          console.log('💬 COMMENT DETECTED - Triggering Discord notification');
-          await autoReactions.handleComment(eventType, payload);
-        }
-        
-      } catch (error) {
-        console.error('Failed to process automatic reactions:', error);
-      }
-    });
+    const actionType = getActionTypeFromWebhook(eventType, payload);
+    if (actionType) {
+      const triggerData = formatTriggerData(eventType, payload);
+      await AreaExecutor.executeMatchingAreas('github', actionType, triggerData);
+    }
 
     res.json({ message: 'Webhook processed successfully' });
   } catch (error) {
@@ -344,7 +298,104 @@ router.post('/webhook', verifyGitHubWebhook, async (req: Request, res: Response)
   }
 });
 
-// GET /api/v1/services/github/oauth/url - Get GitHub OAuth URL (PUBLIC)
+function getActionTypeFromWebhook(eventType: string, payload: any): string | null {
+  switch (eventType) {
+    case 'issues':
+      if (payload.action === 'opened') return 'new_issue_created';
+      break;
+    case 'pull_request':
+      if (payload.action === 'opened') return 'pull_request_opened';
+      break;
+    case 'push':
+      return 'commit_pushed';
+    case 'star':
+      if (payload.action === 'created') return 'repository_starred';
+      break;
+  }
+  return null;
+}
+
+function formatTriggerData(eventType: string, payload: any): any {
+  const base = {
+    repository: {
+      owner: payload.repository?.owner?.login,
+      repo: payload.repository?.name,
+    }
+  };
+
+  switch (eventType) {
+    case 'issues':
+      return {
+        ...base,
+        issue: {
+          number: payload.issue?.number,
+          title: payload.issue?.title,
+          body: payload.issue?.body,
+          user: {
+            login: payload.issue?.user?.login,
+            id: payload.issue?.user?.id,
+          },
+          labels: payload.issue?.labels?.map((l: any) => l.name) || [],
+          html_url: payload.issue?.html_url,
+        }
+      };
+
+    case 'pull_request':
+      return {
+        ...base,
+        pull_request: {
+          number: payload.pull_request?.number,
+          title: payload.pull_request?.title,
+          body: payload.pull_request?.body,
+          user: {
+            login: payload.pull_request?.user?.login,
+            id: payload.pull_request?.user?.id,
+          },
+          html_url: payload.pull_request?.html_url,
+          head: {
+            ref: payload.pull_request?.head?.ref,
+            sha: payload.pull_request?.head?.sha,
+          },
+          base: {
+            ref: payload.pull_request?.base?.ref,
+            sha: payload.pull_request?.base?.sha,
+          }
+        }
+      };
+
+    case 'push':
+      return {
+        ...base,
+        ref: payload.ref,
+        commits: payload.commits?.map((c: any) => ({
+          id: c.id,
+          message: c.message,
+          author: {
+            name: c.author?.name,
+            email: c.author?.email,
+          }
+        })) || [],
+        pusher: {
+          name: payload.pusher?.name,
+          email: payload.pusher?.email,
+        }
+      };
+
+    case 'star':
+      return {
+        ...base,
+        sender: {
+          login: payload.sender?.login,
+          id: payload.sender?.id,
+        },
+        starred_at: payload.starred_at,
+      };
+
+    default:
+      return base;
+  }
+}
+
 router.get('/oauth/url', [
   body('redirectUri').optional().isString().withMessage('Redirect URI must be a string')
 ], handleValidationErrors, async (req: Request, res: Response) => {
@@ -360,7 +411,7 @@ router.get('/oauth/url', [
       });
     }
 
-    const state = crypto.randomBytes(16).toString('hex'); // For security
+    const state = crypto.randomBytes(16).toString('hex');
     const authUrl = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}&state=${state}`;
 
     res.json({
@@ -374,7 +425,6 @@ router.get('/oauth/url', [
   }
 });
 
-// Helper functions for parameter validation
 function validateActionParameters(actionId: string, parameters: any): string | null {
   const requiredFields = ['owner', 'repo'];
   
@@ -384,19 +434,11 @@ function validateActionParameters(actionId: string, parameters: any): string | n
     }
   }
 
-  // Action-specific validations
   switch (actionId) {
     case 'new_issue_created':
-      // labels is optional
-      break;
     case 'pull_request_opened':
-      // targetBranch is optional
-      break;
     case 'commit_pushed':
-      // branch is optional
-      break;
     case 'repository_starred':
-      // No additional validations
       break;
     default:
       return `Unknown action: ${actionId}`;

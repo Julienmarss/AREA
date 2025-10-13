@@ -8,25 +8,23 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerJsdoc from 'swagger-jsdoc';
 import path from 'path';
 
-// Routes
-import authRoutes from './routes/auth';  // ⭐ AJOUT IMPORTANT
+import authRoutes from './routes/auth';
 import spotifyRoutes from './routes/spotify.routes';
 import areasRoutes from './routes/areas.routes';
 import discordRoutes from './routes/discord';
 import githubRoutes from './routes/github';
 
-// Services
 import { HooksService } from './services/hooks.service';
+import { DiscordService } from './services/DiscordService';
+import { GitHubService } from './services/GitHubService';
 
-// Middleware
 import { setupAutoReactions } from './middleware/autoReactions';
 
-dotenv.config({ path: path.join(__dirname, '../../.env') });
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Swagger configuration
 const swaggerOptions = {
   definition: {
     openapi: '3.0.0',
@@ -47,25 +45,20 @@ const swaggerOptions = {
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
-// Middleware
 app.use(helmet());
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:8081',
   credentials: true
 }));
 
-// Raw body middleware for webhook signature verification
 app.use('/api/v1/services/github/webhook', express.raw({ type: 'application/json' }));
 
-// Regular JSON middleware for other routes
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
 
-// Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// Health check
 app.get('/health', (req: Request, res: Response) => {
   res.json({
     status: 'OK',
@@ -75,7 +68,6 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-// About.json endpoint (required by subject)
 app.get('/about.json', (req: Request, res: Response) => {
   const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown';
   
@@ -134,7 +126,6 @@ app.get('/about.json', (req: Request, res: Response) => {
   });
 });
 
-// API Routes
 app.get('/api/v1', (req: Request, res: Response) => {
   res.json({
     message: 'AREA API v1',
@@ -150,14 +141,12 @@ app.get('/api/v1', (req: Request, res: Response) => {
   });
 });
 
-// ⭐ MONTAGE DES ROUTES (ORDRE IMPORTANT)
-app.use('/api/v1/auth', authRoutes);  // Routes d'authentification
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1', spotifyRoutes);
 app.use('/api/v1', areasRoutes);
 app.use('/api/v1/services/discord', discordRoutes);
 app.use('/api/v1/services/github', githubRoutes);
 
-// 404 handler
 app.use((req: Request, res: Response) => {
   res.status(404).json({
     error: 'Not Found',
@@ -165,7 +154,6 @@ app.use((req: Request, res: Response) => {
   });
 });
 
-// Error handler
 app.use((err: Error, req: Request, res: Response, next: any) => {
   console.error('Error:', err);
   res.status(500).json({
@@ -174,24 +162,29 @@ app.use((err: Error, req: Request, res: Response, next: any) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🌐 API: http://localhost:${PORT}`);
   console.log(`📋 About: http://localhost:${PORT}/about.json`);
   console.log(`📚 Swagger docs: http://localhost:${PORT}/api-docs`);
   
-  // Démarrer le système de hooks Spotify
   console.log('🎵 Starting Spotify hooks service...');
   HooksService.start();
   
-  // Initialize Discord bot and auto-reactions
-  console.log('🤖 Initializing Discord bot and auto-reactions...');
+  console.log('🤖 Initializing Discord bot (slash commands)...');
   setupAutoReactions();
+  
+  console.log('🔧 Initializing AREA services...');
+  const discordService = new DiscordService();
+  await discordService.initialize();
+  
+  const githubService = new GitHubService();
+  await githubService.initialize();
+  
+  console.log('✅ All services initialized and ready!');
 });
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('SIGTERM reçu, arrêt gracieux...');
   HooksService.stop();

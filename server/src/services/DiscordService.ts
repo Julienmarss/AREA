@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits, Message, GuildMember, TextChannel, User, Guild, EmbedBuilder, PermissionsBitField } from 'discord.js';
 import { ServiceBase } from './base/ServiceBase';
+import { AreaExecutor } from './AreaExecutor';
 import { ServiceConfig, ActionConfig, ReactionConfig, ActionTriggerEvent } from '../types/area';
 import {
   DiscordMessage,
@@ -336,18 +337,38 @@ export class DiscordService extends ServiceBase {
     });
   }
 
-  private handleMessageCreate(message: Message): void {
-    if (message.author.bot) return; // Ignore bot messages
+private handleMessageCreate(message: Message): void {
+  if (message.author.bot) return;
 
-    // Check for message_posted_in_channel triggers
-    for (const [listenerId, listener] of this.activeListeners.entries()) {
-      if (listener.actionId === 'message_posted_in_channel') {
-        this.checkMessagePostedTrigger(message, listener);
-      } else if (listener.actionId === 'user_mentioned') {
-        this.checkUserMentionedTrigger(message, listener);
-      }
+  const triggerData = {
+    message: this.convertToDiscordMessage(message),
+    channel: this.convertToDiscordChannel(message.channel as TextChannel),
+    author: this.convertToDiscordUser(message.author),
+    guild: message.guild ? this.convertToDiscordGuild(message.guild) : undefined
+  };
+
+  AreaExecutor.executeMatchingAreas('discord', 'message_posted_in_channel', triggerData)
+    .catch(err => console.error('Error executing AREAs for message:', err));
+
+  if (message.mentions.users.size > 0) {
+    message.mentions.users.forEach(mentionedUser => {
+      const mentionTriggerData = {
+        ...triggerData,
+        mentionedUser: this.convertToDiscordUser(mentionedUser),
+      };
+      AreaExecutor.executeMatchingAreas('discord', 'user_mentioned', mentionTriggerData)
+        .catch(err => console.error('Error executing AREAs for mention:', err));
+    });
+  }
+
+  for (const [listenerId, listener] of this.activeListeners.entries()) {
+    if (listener.actionId === 'message_posted_in_channel') {
+      this.checkMessagePostedTrigger(message, listener);
+    } else if (listener.actionId === 'user_mentioned') {
+      this.checkUserMentionedTrigger(message, listener);
     }
   }
+}
 
   private checkMessagePostedTrigger(message: Message, listener: { userId: string; actionId: string; parameters: any }): void {
     const { channelId, keyword, authorId } = listener.parameters;
@@ -408,30 +429,31 @@ export class DiscordService extends ServiceBase {
     });
   }
 
-  private handleGuildMemberAdd(member: GuildMember): void {
-    // Check for user_joined_server triggers
-    for (const [listenerId, listener] of this.activeListeners.entries()) {
-      if (listener.actionId === 'user_joined_server') {
-        const { guildId } = listener.parameters;
+private handleGuildMemberAdd(member: GuildMember): void {
+  const triggerData = {
+    user: this.convertToDiscordUser(member.user),
+    guild: this.convertToDiscordGuild(member.guild),
+    joinedAt: member.joinedAt || new Date()
+  };
 
-        if (member.guild.id === guildId) {
-          const triggerData: UserJoinedServerTriggerData = {
-            user: this.convertToDiscordUser(member.user),
-            guild: this.convertToDiscordGuild(member.guild),
-            joinedAt: member.joinedAt || new Date()
-          };
+  AreaExecutor.executeMatchingAreas('discord', 'user_joined_server', triggerData)
+    .catch(err => console.error('Error executing AREAs for member join:', err));
 
-          this.emitActionTrigger({
-            serviceId: 'discord',
-            actionId: 'user_joined_server',
-            userId: listener.userId,
-            data: triggerData,
-            timestamp: new Date()
-          });
-        }
+  for (const [listenerId, listener] of this.activeListeners.entries()) {
+    if (listener.actionId === 'user_joined_server') {
+      const { guildId } = listener.parameters;
+      if (member.guild.id === guildId) {
+        this.emitActionTrigger({
+          serviceId: 'discord',
+          actionId: 'user_joined_server',
+          userId: listener.userId,
+          data: triggerData,
+          timestamp: new Date()
+        });
       }
     }
   }
+}
 
   private async sendMessageToChannel(parameters: any): Promise<boolean> {
     try {
