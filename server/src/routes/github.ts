@@ -406,7 +406,7 @@ router.get('/oauth/url', [
 ], handleValidationErrors, async (req: Request, res: Response) => {
   try {
     const clientId = process.env.GITHUB_CLIENT_ID;
-    const redirectUri = req.body.redirectUri || process.env.GITHUB_REDIRECT_URI || 'http://localhost:8080/api/v1/auth/github/callback';
+    const redirectUri = req.body.redirectUri || process.env.GITHUB_REDIRECT_URI || 'http://localhost:8080/api/v1/services/github/oauth/callback';
     const scopes = githubService.getConfig().scopes?.join(' ') || 'repo read:user';
 
     if (!clientId) {
@@ -508,5 +508,46 @@ function getRequiredWebhookEvents(actionId: string): string[] {
       return [];
   }
 }
+
+
+// GET user repositories
+router.get('/repositories', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.id;
+    
+    const user = userStorage.findById(userId);
+    const githubData = user?.services?.github;
+    
+    if (!githubData?.accessToken) {
+      return res.status(401).json({ error: 'GitHub not authenticated' });
+    }
+    
+    const { Octokit } = require('@octokit/rest');
+    const octokit = new Octokit({
+      auth: githubData.accessToken
+    });
+    
+    const { data: repos } = await octokit.rest.repos.listForAuthenticatedUser({
+      sort: 'updated',
+      per_page: 100,
+      affiliation: 'owner,collaborator'
+    });
+    
+    const formattedRepos = repos.map((repo: any) => ({
+      id: repo.id,
+      name: repo.name,
+      fullName: repo.full_name,
+      owner: repo.owner.login,
+      private: repo.private,
+      description: repo.description,
+      url: repo.html_url
+    }));
+    
+    res.json({ repositories: formattedRepos });
+  } catch (error: any) {
+    console.error('Failed to fetch repositories:', error);
+    res.status(500).json({ error: 'Failed to fetch repositories' });
+  }
+});
 
 export default router;

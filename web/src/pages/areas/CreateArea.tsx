@@ -10,6 +10,16 @@ interface ServiceInfo {
   reactions: Array<{ name: string; description: string }>;
 }
 
+interface GitHubRepository {
+  id: number;
+  name: string;
+  fullName: string;
+  owner: string;
+  private: boolean;
+  description: string;
+  url: string;
+}
+
 export default function CreateArea() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -25,6 +35,10 @@ export default function CreateArea() {
   const [githubConnected, setGithubConnected] = useState(false);
   const [discordConnected, setDiscordConnected] = useState(false);
   const [spotifyConnected, setSpotifyConnected] = useState(false);
+
+  // GitHub repositories
+  const [githubRepos, setGithubRepos] = useState<GitHubRepository[]>([]);
+  const [loadingRepos, setLoadingRepos] = useState(false);
 
   // Form states
   const [areaName, setAreaName] = useState('');
@@ -44,10 +58,26 @@ export default function CreateArea() {
   const [currentStep, setCurrentStep] = useState(1);
 
   useEffect(() => {
-    loadData();
-  }, []);
+    if (user?.id) {
+      loadData();
+    }
+  }, [user?.id]);
+
+  // Charger les repos GitHub quand on sélectionne une réaction GitHub
+  useEffect(() => {
+    if (reactionService === 'github' && githubConnected && githubRepos.length === 0) {
+      loadGitHubRepositories();
+    }
+  }, [reactionService, githubConnected]);
 
   const loadData = async () => {
+    const userId = user?.id;
+    
+    if (!userId) {
+      console.warn('⚠️ Cannot load data: no user ID');
+      return;
+    }
+
     try {
       // Load available services
       const aboutData = await aboutAPI.getInfo();
@@ -55,25 +85,46 @@ export default function CreateArea() {
 
       // Check service connections
       try {
-        const github = await githubAPI.getStatus();
+        const github = await githubAPI.getStatus(userId);
         setGithubConnected(github.authenticated);
-      } catch (e) {}
+      } catch (e) {
+        console.error('Failed to check GitHub:', e);
+      }
 
       try {
         const discord = await discordAPI.getStatus();
         setDiscordConnected(discord.authenticated);
-      } catch (e) {}
+      } catch (e) {
+        console.error('Failed to check Discord:', e);
+      }
 
       try {
-        const spotify = await spotifyAPI.getStatus(user?.id || 'demo_user');
+        const spotify = await spotifyAPI.getStatus(userId);
         setSpotifyConnected(spotify.connected);
-      } catch (e) {}
+      } catch (e) {
+        console.error('Failed to check Spotify:', e);
+      }
 
     } catch (error) {
       console.error('Failed to load data:', error);
       setError('Failed to load services');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadGitHubRepositories = async () => {
+    setLoadingRepos(true);
+    try {
+      console.log('📦 Loading GitHub repositories...');
+      const response = await githubAPI.getRepositories();
+      setGithubRepos(response.repositories);
+      console.log('✅ Loaded', response.repositories.length, 'repositories');
+    } catch (error) {
+      console.error('Failed to load repositories:', error);
+      setError('Failed to load GitHub repositories');
+    } finally {
+      setLoadingRepos(false);
     }
   };
 
@@ -130,15 +181,16 @@ export default function CreateArea() {
         enabled: true,
       };
 
+      console.log('📝 Creating AREA:', areaData);
       await areasAPI.create(areaData);
       setSuccess(true);
       
-      // Redirect to dashboard after 2 seconds
       setTimeout(() => {
         navigate('/dashboard');
       }, 2000);
 
     } catch (error: any) {
+      console.error('Failed to create AREA:', error);
       setError(error.message || 'Failed to create AREA');
     } finally {
       setCreating(false);
@@ -147,8 +199,19 @@ export default function CreateArea() {
 
   const canProceedToStep2 = areaName.trim() !== '';
   const canProceedToStep3 = actionService && actionType;
-  const canProceedToStep4 = reactionService && reactionType;
+  const canProceedToStep4 = reactionService && reactionType && isReactionConfigValid();
   const canSubmit = canProceedToStep2 && canProceedToStep3 && canProceedToStep4;
+
+  function isReactionConfigValid(): boolean {
+    if (reactionService === 'github' && reactionType === 'create_issue') {
+      return !!(reactionConfig.owner && reactionConfig.repo && reactionConfig.title);
+    }
+    if (reactionService === 'discord' && reactionType === 'send_message_to_channel') {
+      return !!(reactionConfig.channelId && reactionConfig.content);
+    }
+    // Autres validations...
+    return true;
+  }
 
   if (loading) {
     return (
@@ -170,7 +233,7 @@ export default function CreateArea() {
     );
   }
 
-  return (
+return (
     <div className="max-w-4xl mx-auto px-4 py-12 sm:px-6 lg:px-8">
       {/* Header */}
       <div className="mb-8">
@@ -246,7 +309,7 @@ export default function CreateArea() {
                 type="text"
                 value={areaName}
                 onChange={(e) => setAreaName(e.target.value)}
-                placeholder="e.g., Auto save Spotify tracks"
+                placeholder="e.g., Create GitHub issue from Discord"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
                 required
               />
@@ -371,6 +434,41 @@ export default function CreateArea() {
               </div>
             )}
 
+            {/* Action Config for Discord */}
+            {actionService === 'discord' && actionType === 'message_posted_in_channel' && (
+              <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-semibold text-gray-900">Configuration</h4>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Channel ID *
+                  </label>
+                  <input
+                    type="text"
+                    value={actionConfig.channelId || ''}
+                    onChange={(e) => setActionConfig({ ...actionConfig, channelId: e.target.value })}
+                    placeholder="123456789012345678"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Keyword (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={actionConfig.keyword || ''}
+                    onChange={(e) => setActionConfig({ ...actionConfig, keyword: e.target.value })}
+                    placeholder="bug"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Only trigger when message contains this keyword
+                  </p>
+                </div>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={() => setCurrentStep(3)}
@@ -469,6 +567,138 @@ export default function CreateArea() {
               </div>
             )}
 
+            {/* REAction Config for GitHub - Create Issue */}
+            {reactionService === 'github' && reactionType === 'create_issue' && (
+              <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-semibold text-gray-900">Configuration</h4>
+                
+                {loadingRepos ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader className="h-6 w-6 text-indigo-600 animate-spin" />
+                    <span className="ml-2 text-gray-600">Loading repositories...</span>
+                  </div>
+                ) : githubRepos.length > 0 ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Select Repository *
+                    </label>
+                    <select
+                      value={reactionConfig.repo ? `${reactionConfig.owner}/${reactionConfig.repo}` : ''}
+                      onChange={(e) => {
+                        const [owner, repo] = e.target.value.split('/');
+                        setReactionConfig({ ...reactionConfig, owner, repo });
+                      }}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
+                      required
+                    >
+                      <option value="">-- Select a repository --</option>
+                      {githubRepos.map((repo) => (
+                        <option key={repo.id} value={repo.fullName}>
+                          {repo.fullName} {repo.private ? '🔒' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {githubRepos.length} repositories available
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-gray-600 mb-2">No repositories found</p>
+                    <button
+                      type="button"
+                      onClick={loadGitHubRepositories}
+                      className="text-sm text-indigo-600 hover:text-indigo-700"
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Issue Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={reactionConfig.title || ''}
+                    onChange={(e) => setReactionConfig({ ...reactionConfig, title: e.target.value })}
+                    placeholder="New issue from Discord: {{message.content}}"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Placeholders: {`{{message.content}}`}, {`{{message.author}}`}, {`{{message.channel}}`}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Issue Body (optional)
+                  </label>
+                  <textarea
+                    value={reactionConfig.body || ''}
+                    onChange={(e) => setReactionConfig({ ...reactionConfig, body: e.target.value })}
+                    placeholder="Issue created from Discord message by {{message.author}}"
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Labels (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={reactionConfig.labels || ''}
+                    onChange={(e) => setReactionConfig({ ...reactionConfig, labels: e.target.value })}
+                    placeholder="bug, automated"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Comma-separated list of labels
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* REAction Config for Discord - Send Message */}
+            {reactionService === 'discord' && reactionType === 'send_message_to_channel' && (
+              <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                <h4 className="font-semibold text-gray-900">Configuration</h4>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Channel ID *
+                  </label>
+                  <input
+                    type="text"
+                    value={reactionConfig.channelId || ''}
+                    onChange={(e) => setReactionConfig({ ...reactionConfig, channelId: e.target.value })}
+                    placeholder="123456789012345678"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Message Content *
+                  </label>
+                  <textarea
+                    value={reactionConfig.content || ''}
+                    onChange={(e) => setReactionConfig({ ...reactionConfig, content: e.target.value })}
+                    placeholder="New GitHub issue: {{issue.title}}"
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Placeholders: {`{{issue.title}}`}, {`{{issue.number}}`}, {`{{issue.html_url}}`}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={() => setCurrentStep(4)}
@@ -515,6 +745,15 @@ export default function CreateArea() {
                     <span className="font-medium capitalize">{actionService}</span>
                   </div>
                   <p className="text-sm text-gray-700">{actionType.replace(/_/g, ' ')}</p>
+                  {Object.keys(actionConfig).length > 0 && (
+                    <div className="mt-2 text-xs text-gray-600">
+                      {Object.entries(actionConfig).map(([key, value]) => (
+                        <div key={key}>
+                          <span className="font-medium">{key}:</span> {value}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <ArrowRight className="h-6 w-6 text-gray-400 flex-shrink-0" />
@@ -528,6 +767,15 @@ export default function CreateArea() {
                     <span className="font-medium capitalize">{reactionService}</span>
                   </div>
                   <p className="text-sm text-gray-700">{reactionType.replace(/_/g, ' ')}</p>
+                  {Object.keys(reactionConfig).length > 0 && (
+                    <div className="mt-2 text-xs text-gray-600">
+                      {Object.entries(reactionConfig).map(([key, value]) => (
+                        <div key={key} className="truncate">
+                          <span className="font-medium">{key}:</span> {value}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

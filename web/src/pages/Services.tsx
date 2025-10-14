@@ -1,43 +1,53 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { githubAPI, discordAPI, spotifyAPI } from '../services/api';
-import { Github, MessageSquare, Music, CheckCircle, XCircle, Loader, ExternalLink } from 'lucide-react';
-
-interface ServiceStatus {
-  connected: boolean;
-  loading: boolean;
-  username?: string;
-  error?: string;
-}
+import { ServiceStatus } from '../types/services';
+import GitHubConnect from '../components/services/GitHubConnect';
+import DiscordConnect from '../components/services/DiscordConnect';
+import SpotifyConnect from '../components/services/SpotifyConnect';
 
 export default function Services() {
   const { user } = useAuth();
 
-  const [githubStatus, setGithubStatus] = useState<ServiceStatus>({ connected: false, loading: true });
-  const [discordStatus, setDiscordStatus] = useState<ServiceStatus>({ connected: false, loading: true });
-  const [spotifyStatus, setSpotifyStatus] = useState<ServiceStatus>({ connected: false, loading: true });
-
-  const [discordBotToken, setDiscordBotToken] = useState('');
-  const [discordGuildId, setDiscordGuildId] = useState('');
-
-  const [connectingDiscord, setConnectingDiscord] = useState(false);
+  const [githubStatus, setGithubStatus] = useState<ServiceStatus>({ 
+    connected: false, 
+    loading: true 
+  });
+  
+  const [discordStatus, setDiscordStatus] = useState<ServiceStatus>({ 
+    connected: false, 
+    loading: true 
+  });
+  
+  const [spotifyStatus, setSpotifyStatus] = useState<ServiceStatus>({ 
+    connected: false, 
+    loading: true 
+  });
 
   useEffect(() => {
     loadStatuses();
   }, []);
 
-  const loadStatuses = async () => {
-    try {
-      const githubRes = await githubAPI.getStatus();
-      setGithubStatus({
-        connected: githubRes.authenticated,
-        loading: false,
-        username: githubRes.username,
-      });
-    } catch (error) {
-      setGithubStatus({ connected: false, loading: false });
-    }
+const loadStatuses = async () => {
+  const userId = user?.id || 'demo_user';
+  
+  // Load GitHub status
+  try {
+    console.log('🔍 Loading GitHub status for user:', userId);
+    const githubRes = await githubAPI.getStatus(userId);
+    console.log('✅ GitHub status:', githubRes);
+    
+    setGithubStatus({
+      connected: githubRes.authenticated,
+      loading: false,
+      username: githubRes.username,
+    });
+  } catch (error) {
+    console.error('❌ Failed to load GitHub status:', error);
+    setGithubStatus({ connected: false, loading: false });
+  }
 
+    // Load Discord status
     try {
       const discordRes = await discordAPI.getStatus();
       setDiscordStatus({
@@ -48,6 +58,7 @@ export default function Services() {
       setDiscordStatus({ connected: false, loading: false });
     }
 
+    // Load Spotify status
     try {
       const spotifyRes = await spotifyAPI.getStatus(user?.id || 'demo_user');
       setSpotifyStatus({
@@ -71,25 +82,18 @@ export default function Services() {
     }
   };
 
-  const handleConnectDiscord = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!discordBotToken.trim() || !discordGuildId.trim()) return;
-
-    setConnectingDiscord(true);
+  const handleConnectDiscord = async (botToken: string, guildId: string) => {
     setDiscordStatus(prev => ({ ...prev, error: undefined }));
 
     try {
-      await discordAPI.connect(discordBotToken, discordGuildId);
+      await discordAPI.connect(botToken, guildId);
       await loadStatuses();
-      setDiscordBotToken('');
-      setDiscordGuildId('');
     } catch (error: any) {
       setDiscordStatus(prev => ({
         ...prev,
         error: error.message || 'Failed to connect',
       }));
-    } finally {
-      setConnectingDiscord(false);
+      throw error;
     }
   };
 
@@ -115,259 +119,45 @@ export default function Services() {
       </div>
 
       <div className="space-y-6">
-        {/* GitHub Service */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
-          <div className="bg-gradient-to-r from-gray-800 to-gray-900 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Github className="h-6 w-6 text-white" />
-                <h3 className="text-xl font-semibold text-white">GitHub</h3>
-              </div>
-              {githubStatus.loading ? (
-                <Loader className="h-5 w-5 text-white animate-spin" />
-              ) : githubStatus.connected ? (
-                <div className="flex items-center space-x-2">
-                  <CheckCircle className="h-5 w-5 text-green-400" />
-                  <span className="text-sm text-white font-medium">Connected</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <XCircle className="h-5 w-5 text-gray-400" />
-                  <span className="text-sm text-gray-300">Not connected</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="p-6">
-            {githubStatus.connected ? (
-              <div className="text-center py-4">
-                <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
-                <p className="text-gray-900 font-semibold">
-                  Connected as {githubStatus.username || 'GitHub User'}
-                </p>
-                <p className="text-sm text-gray-600 mt-1">
-                  You can now use GitHub actions and reactions in your AREAs
-                </p>
-              </div>
-            ) : (
-              <div>
-                <p className="text-gray-700 mb-4">
-                  Connect your GitHub account to automate issues, pull requests, and repositories.
-                </p>
-                
-                <p className="text-sm text-gray-600 mb-4">
-                  ✅ Full access to your repositories<br/>
-                  ✅ Create issues and pull requests<br/>
-                  ✅ Add comments and manage repos<br/>
-                </p>
-
-                {githubStatus.error && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800 mb-4">
-                    {githubStatus.error}
-                  </div>
-                )}
-
-                <button
-                  onClick={handleConnectGitHub}
-                  className="w-full py-3 px-4 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition font-semibold flex items-center justify-center space-x-2"
-                >
-                  <Github className="h-5 w-5" />
-                  <span>Connect with GitHub</span>
-                </button>
-                
-                <p className="text-xs text-gray-500 mt-2 text-center">
-                  You'll be redirected to GitHub to authorize access
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Discord Service */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
-          <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <MessageSquare className="h-6 w-6 text-white" />
-                <h3 className="text-xl font-semibold text-white">Discord</h3>
-              </div>
-              {discordStatus.loading ? (
-                <Loader className="h-5 w-5 text-white animate-spin" />
-              ) : discordStatus.connected ? (
-                <div className="flex items-center space-x-2">
-                  <CheckCircle className="h-5 w-5 text-green-400" />
-                  <span className="text-sm text-white font-medium">Connected</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <XCircle className="h-5 w-5 text-indigo-300" />
-                  <span className="text-sm text-white">Not connected</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="p-6">
-            {discordStatus.connected ? (
-              <div className="text-center py-4">
-                <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
-                <p className="text-gray-900 font-semibold">Discord Bot Connected</p>
-                <p className="text-sm text-gray-600 mt-1">
-                  Your bot is active and ready to automate Discord messages
-                </p>
-              </div>
-            ) : (
-<div>
-  <p className="text-gray-700 mb-4">
-    Connect a Discord bot to automate messages, roles, and server events.
-  </p>
-  <form onSubmit={handleConnectDiscord} className="space-y-4">
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">
-        Bot Token
-      </label>
-      <input
-        type="password"
-        value={discordBotToken}
-        onChange={(e) => setDiscordBotToken(e.target.value)}
-        placeholder="MTxxxxxxxxx.xxxxxx.xxxxxxxxxxxxxxxxxxx"
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-        required
-      />
-    </div>
-
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">
-        Server ID (Guild ID)
-      </label>
-      <input
-        type="text"
-        value={discordGuildId}
-        onChange={(e) => setDiscordGuildId(e.target.value)}
-        placeholder="123456789012345678"
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600 focus:border-transparent"
-        required
-      />
-      <p className="text-xs text-gray-500 mt-1">
-        Create a bot at{' '}
-        
-          href="https://discord.com/developers/applications"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue-600 hover:underline inline-flex items-center"
-        >
-          discord.com/developers
-          <ExternalLink className="h-3 w-3 ml-1" />
-        </a>
-      </p>
-    </div>
-
-    {discordStatus.error && (
-      <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
-        {discordStatus.error}
-      </div>
-    )}
-
-    <button
-      type="submit"
-      disabled={connectingDiscord}
-      className="w-full py-2 px-4 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
-    >
-      {connectingDiscord ? 'Connecting...' : 'Connect Discord'}
-    </button>
-  </form>
-        
-
-        {/* Spotify Service */}
-        <div className="bg-white rounded-xl shadow-md overflow-hidden">
-          <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-3">
-                <Music className="h-6 w-6 text-white" />
-                <h3 className="text-xl font-semibold text-white">Spotify</h3>
-              </div>
-              {spotifyStatus.loading ? (
-                <Loader className="h-5 w-5 text-white animate-spin" />
-              ) : spotifyStatus.connected ? (
-                <div className="flex items-center space-x-2">
-                  <CheckCircle className="h-5 w-5 text-green-300" />
-                  <span className="text-sm text-white font-medium">Connected</span>
-                </div>
-              ) : (
-                <div className="flex items-center space-x-2">
-                  <XCircle className="h-5 w-5 text-green-300" />
-                  <span className="text-sm text-white">Not connected</span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="p-6">
-            {spotifyStatus.connected ? (
-              <div className="text-center py-4">
-                <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
-                <p className="text-gray-900 font-semibold">Spotify Connected</p>
-                <p className="text-sm text-gray-600 mt-1">
-                  You can now automate your music with Spotify actions and reactions
-                </p>
-              </div>
-            ) : (
-              <div>
-                <p className="text-gray-700 mb-4">
-                  Connect your Spotify account to automate playlists, tracks, and artists.
-                </p>
-
-                {spotifyStatus.error && (
-                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
-                    {spotifyStatus.error}
-                  </div>
-                )}
-
-                <button
-                  onClick={handleConnectSpotify}
-                  className="w-full py-3 px-4 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold flex items-center justify-center space-x-2"
-                >
-                  <Music className="h-5 w-5" />
-                  <span>Connect with Spotify</span>
-                </button>
-                <p className="text-xs text-gray-500 mt-2 text-center">
-                  You'll be redirected to Spotify to authorize access
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+        <GitHubConnect status={githubStatus} onConnect={handleConnectGitHub} />
+        <DiscordConnect status={discordStatus} onConnect={handleConnectDiscord} />
+        <SpotifyConnect status={spotifyStatus} onConnect={handleConnectSpotify} />
       </div>
 
       {/* Help Section */}
       <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <><h3 className="text-lg font-semibold text-blue-900 mb-2">
+        <h3 className="text-lg font-semibold text-blue-900 mb-2">
           Need help connecting services?
-        </h3><ul className="space-y-2 text-sm text-blue-800">
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>
-                <strong>GitHub:</strong> Click "Connect with GitHub" to authorize via OAuth2
-              </span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>
-                <strong>Discord:</strong> Create a bot application at{' '}
-                <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="underline">
-                  discord.com/developers
-                </a>
-                {' '}and invite it to your server
-              </span>
-            </li>
-            <li className="flex items-start">
-              <span className="mr-2">•</span>
-              <span>
-                <strong>Spotify:</strong> Click the connect button to authorize via OAuth2
-              </span>
-            </li>
-          </ul></>
+        </h3>
+        <ul className="space-y-2 text-sm text-blue-800">
+          <li className="flex items-start">
+            <span className="mr-2">•</span>
+            <span>
+              <strong>GitHub:</strong> Click "Connect with GitHub" to authorize via OAuth2
+            </span>
+          </li>
+          <li className="flex items-start">
+            <span className="mr-2">•</span>
+            <span>
+              <strong>Discord:</strong> Create a bot application at{' '}
+              <a 
+                href="https://discord.com/developers/applications" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="underline"
+              >
+                discord.com/developers
+              </a>
+              {' '}and invite it to your server
+            </span>
+          </li>
+          <li className="flex items-start">
+            <span className="mr-2">•</span>
+            <span>
+              <strong>Spotify:</strong> Click the connect button to authorize via OAuth2
+            </span>
+          </li>
+        </ul>
       </div>
     </div>
   );

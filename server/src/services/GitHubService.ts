@@ -249,37 +249,43 @@ export class GitHubService extends ServiceBase {
     ];
   }
 
-  async authenticate(userId: string, authData: { accessToken: string }): Promise<boolean> {
-    try {
-      this.octokit = new Octokit({
-        auth: authData.accessToken
-      });
+async authenticate(userId: string, authData: { accessToken: string }): Promise<boolean> {
+  try {
+    console.log('🔐 Authenticating GitHub for user:', userId);
+    
+    this.octokit = new Octokit({
+      auth: authData.accessToken
+    });
 
-      // Test the authentication by getting user info
-      const { data: user } = await this.octokit.rest.users.getAuthenticated();
+    // Test the authentication by getting user info
+    const { data: user } = await this.octokit.rest.users.getAuthenticated();
+    
+    console.log('✅ GitHub user authenticated:', user.login);
 
-      this.setAuthData(userId, {
-        userId,
-        serviceId: 'github',
-        accessToken: authData.accessToken,
-        metadata: {
-          username: user.login,
-          userId: user.id,
-          connectedAt: new Date()
-        }
-      });
+    this.setAuthData(userId, {
+      userId,
+      serviceId: 'github',
+      accessToken: authData.accessToken,
+      metadata: {
+        username: user.login,
+        userId: user.id,
+        connectedAt: new Date()
+      }
+    });
 
-      return true;
-    } catch (error) {
-      console.error('GitHub authentication failed:', error);
-      return false;
-    }
+    return true;
+  } catch (error) {
+    console.error('❌ GitHub authentication failed:', error);
+    return false;
   }
+}
 
-  async isAuthenticated(userId: string): Promise<boolean> {
-    const authData = this.getAuthData(userId);
-    return authData !== undefined && this.octokit !== null;
-  }
+async isAuthenticated(userId: string): Promise<boolean> {
+  const authData = this.getAuthData(userId);
+  const isAuth = authData !== undefined && this.octokit !== null;
+  console.log(`🔍 GitHub isAuthenticated for ${userId}:`, isAuth);
+  return isAuth;
+}
 
   async refreshAuth(userId: string): Promise<boolean> {
     // GitHub tokens don't expire automatically, but we can test if they're still valid

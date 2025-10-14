@@ -53,13 +53,19 @@ export const authAPI = {
 // ============= GITHUB API =============
 export const githubAPI = {
   // Vérifier le statut de connexion
-  getStatus: async () => {
-    return fetchAPI('/api/v1/services/github/oauth/status');
+  getStatus: async (userId?: string) => {
+    const query = userId ? `?userId=${userId}` : '';
+    return fetchAPI(`/api/v1/services/github/oauth/status${query}`);
   },
 
   // Initier l'OAuth
   initiateOAuth: async (userId: string) => {
     return fetchAPI(`/api/v1/services/github/oauth/authorize?userId=${userId}`);
+  },
+
+  // ✅ Récupérer les repositories de l'utilisateur
+  getRepositories: async () => {
+    return fetchAPI('/api/v1/services/github/repositories');
   },
 };
 

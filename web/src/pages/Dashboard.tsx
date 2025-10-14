@@ -19,34 +19,35 @@ export default function Dashboard() {
     loadDashboardData();
   }, []);
 
-  const loadDashboardData = async () => {
-    // Charger les AREAs
-    try {
-      const areasData = await areasAPI.getAll(user?.id);
-      setAreas(areasData.areas || []);
-    } catch (error) {
-      console.error('Failed to load areas:', error);
-    } finally {
-      setLoading(false);
-    }
+const loadDashboardData = async () => {
+  const userId = user?.id; // ✅ Utiliser le vrai userId
+  
+  // Charger les AREAs
+  try {
+    const areasData = await areasAPI.getAll(userId);
+    setAreas(areasData.areas || []);
+  } catch (error) {
+    console.error('Failed to load areas:', error);
+  } finally {
+    setLoading(false);
+  }
 
-    // Charger les statuts des services
-    try {
-      const [github, discord, spotify] = await Promise.all([
-        githubAPI.getStatus().catch(() => ({ authenticated: false })),
-        discordAPI.getStatus().catch(() => ({ authenticated: false })),
-        spotifyAPI.getStatus(user?.id || 'demo_user').catch(() => ({ connected: false })),
-      ]);
+  try {
+    const [github, discord, spotify] = await Promise.all([
+      githubAPI.getStatus(userId).catch(() => ({ authenticated: false })),
+      discordAPI.getStatus().catch(() => ({ authenticated: false })),
+      spotifyAPI.getStatus(userId || 'demo_user').catch(() => ({ connected: false })),
+    ]);
 
-      setGithubConnected(github.authenticated);
-      setDiscordConnected(discord.authenticated);
-      setSpotifyConnected(spotify.connected);
-    } catch (error) {
-      console.error('Failed to load service statuses:', error);
-    } finally {
-      setServicesLoading(false);
-    }
-  };
+    setGithubConnected(github.authenticated);
+    setDiscordConnected(discord.authenticated);
+    setSpotifyConnected(spotify.connected);
+  } catch (error) {
+    console.error('Failed to load service statuses:', error);
+  } finally {
+    setServicesLoading(false);
+  }
+};
 
   const handleToggleArea = async (areaId: string) => {
     try {

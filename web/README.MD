@@ -200,7 +200,7 @@ authAPI.login(email, password)
 authAPI.me()
 
 // GitHub
-githubAPI.getStatus()
+githubAPI.getStatus(user?.id)
 githubAPI.connect(accessToken)
 
 // Discord

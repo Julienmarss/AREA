@@ -1,15 +1,16 @@
-// server/src/services/AreaExecutor.ts
 import { AREA, InMemoryDB } from '../models/area.model';
 import { GitHubService } from './GitHubService';
 import { DiscordService } from './DiscordService';
 import { SpotifyService } from './spotify.service';
+import { userStorage } from '../storage/UserStorage';
 
 /**
  * Service central pour exécuter les REActions des AREAs
  */
 export class AreaExecutor {
-  private static githubService = new GitHubService();
-  private static discordService = new DiscordService();
+  // Supprimer les instances statiques partagées
+  // private static githubService = new GitHubService();
+  // private static discordService = new DiscordService();
 
   /**
    * Trouve et exécute toutes les AREAs correspondant à un événement
@@ -180,7 +181,36 @@ export class AreaExecutor {
     config: any,
     triggerData: any
   ): Promise<void> {
-    await this.githubService.executeReaction(reactionType, userId, config, triggerData);
+    console.log(`🔧 Executing GitHub reaction for user: ${userId}`);
+    
+    // ✅ Créer une instance dédiée et l'authentifier
+    const githubService = new GitHubService();
+    
+    // Récupérer le token depuis userStorage
+    const user = userStorage.findById(userId);
+    const githubData = user?.services?.github;
+    
+    if (!githubData?.accessToken) {
+      console.error(`❌ No GitHub token found for user ${userId}`);
+      throw new Error('GitHub not authenticated for this user');
+    }
+    
+    console.log(`✅ Found GitHub token for user ${userId}`);
+    
+    // Authentifier le service avec le token
+    const authenticated = await githubService.authenticate(userId, { 
+      accessToken: githubData.accessToken 
+    });
+    
+    if (!authenticated) {
+      console.error(`❌ Failed to authenticate GitHub service for user ${userId}`);
+      throw new Error('GitHub authentication failed');
+    }
+    
+    console.log(`✅ GitHub service authenticated for user ${userId}`);
+    
+    // Exécuter la réaction
+    await githubService.executeReaction(reactionType, userId, config, triggerData);
   }
 
   private static async executeDiscordReaction(
@@ -189,7 +219,37 @@ export class AreaExecutor {
     config: any,
     triggerData: any
   ): Promise<void> {
-    await this.discordService.executeReaction(reactionType, userId, config, triggerData);
+    console.log(`🔧 Executing Discord reaction for user: ${userId}`);
+    
+    // ✅ Créer une instance dédiée
+    const discordService = new DiscordService();
+    
+    // Récupérer les données Discord depuis userStorage
+    const user = userStorage.findById(userId);
+    const discordData = user?.services?.discord;
+    
+    if (!discordData?.botToken || !discordData?.guildId) {
+      console.error(`❌ No Discord credentials found for user ${userId}`);
+      throw new Error('Discord not authenticated for this user');
+    }
+    
+    console.log(`✅ Found Discord credentials for user ${userId}`);
+    
+    // Authentifier le service
+    const authenticated = await discordService.authenticate(userId, {
+      botToken: discordData.botToken,
+      guildId: discordData.guildId
+    });
+    
+    if (!authenticated) {
+      console.error(`❌ Failed to authenticate Discord service for user ${userId}`);
+      throw new Error('Discord authentication failed');
+    }
+    
+    console.log(`✅ Discord service authenticated for user ${userId}`);
+    
+    // Exécuter la réaction
+    await discordService.executeReaction(reactionType, userId, config, triggerData);
   }
 
   private static async executeSpotifyReaction(
