@@ -1,3 +1,4 @@
+// web/src/pages/Services.tsx
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { githubAPI, discordAPI, spotifyAPI } from '../services/api';
@@ -28,39 +29,46 @@ export default function Services() {
     loadStatuses();
   }, []);
 
-const loadStatuses = async () => {
-  const userId = user?.id || 'demo_user';
-  
-  // Load GitHub status
-  try {
-    console.log('🔍 Loading GitHub status for user:', userId);
-    const githubRes = await githubAPI.getStatus(userId);
-    console.log('✅ GitHub status:', githubRes);
+  const loadStatuses = async () => {
+    const userId = user?.id || 'demo_user';
     
-    setGithubStatus({
-      connected: githubRes.authenticated,
-      loading: false,
-      username: githubRes.username,
-    });
-  } catch (error) {
-    console.error('❌ Failed to load GitHub status:', error);
-    setGithubStatus({ connected: false, loading: false });
-  }
-
-    // Load Discord status
+    // Load GitHub status
     try {
-      const discordRes = await discordAPI.getStatus();
+      console.log('🔍 Loading GitHub status for user:', userId);
+      const githubRes = await githubAPI.getStatus(userId);
+      console.log('✅ GitHub status:', githubRes);
+      
+      setGithubStatus({
+        connected: githubRes.authenticated,
+        loading: false,
+        username: githubRes.username,
+      });
+    } catch (error) {
+      console.error('❌ Failed to load GitHub status:', error);
+      setGithubStatus({ connected: false, loading: false });
+    }
+
+    // ✅ Load Discord status (OAuth2)
+    try {
+      console.log('🔍 Loading Discord status for user:', userId);
+      const discordRes = await discordAPI.getStatus(userId);
+      console.log('✅ Discord status:', discordRes);
+      
       setDiscordStatus({
         connected: discordRes.authenticated,
         loading: false,
+        username: discordRes.username,
+        discriminator: discordRes.discriminator,
+        guildCount: discordRes.guilds?.length || 0,
       });
     } catch (error) {
+      console.error('❌ Failed to load Discord status:', error);
       setDiscordStatus({ connected: false, loading: false });
     }
 
     // Load Spotify status
     try {
-      const spotifyRes = await spotifyAPI.getStatus(user?.id || 'demo_user');
+      const spotifyRes = await spotifyAPI.getStatus(userId);
       setSpotifyStatus({
         connected: spotifyRes.connected,
         loading: false,
@@ -82,18 +90,16 @@ const loadStatuses = async () => {
     }
   };
 
-  const handleConnectDiscord = async (botToken: string, guildId: string) => {
-    setDiscordStatus(prev => ({ ...prev, error: undefined }));
-
+  // ✅ Nouvelle méthode pour Discord OAuth2
+  const handleConnectDiscord = async () => {
     try {
-      await discordAPI.connect(botToken, guildId);
-      await loadStatuses();
+      const response = await discordAPI.initiateOAuth(user?.id || 'demo_user');
+      window.location.href = response.authUrl;
     } catch (error: any) {
       setDiscordStatus(prev => ({
         ...prev,
-        error: error.message || 'Failed to connect',
+        error: error.message || 'Failed to initiate OAuth',
       }));
-      throw error;
     }
   };
 
@@ -139,16 +145,7 @@ const loadStatuses = async () => {
           <li className="flex items-start">
             <span className="mr-2">•</span>
             <span>
-              <strong>Discord:</strong> Create a bot application at{' '}
-              <a 
-                href="https://discord.com/developers/applications" 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="underline"
-              >
-                discord.com/developers
-              </a>
-              {' '}and invite it to your server
+              <strong>Discord:</strong> Click "Connect with Discord" to authorize your account and select servers
             </span>
           </li>
           <li className="flex items-start">

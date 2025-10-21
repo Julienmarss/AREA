@@ -71,22 +71,37 @@ export const githubAPI = {
 
 // ============= DISCORD API =============
 export const discordAPI = {
-  // Vérifier le statut de connexion
-  getStatus: async () => {
-    return fetchAPI('/api/v1/services/discord/auth');
+  // ✅ Vérifier le statut de connexion
+  getStatus: async (userId?: string) => {
+    const query = userId ? `?userId=${userId}` : '';
+    return fetchAPI(`/api/v1/services/discord/oauth/status${query}`);
   },
 
-  // Connecter Discord avec un bot token
-  connect: async (botToken: string, guildId: string) => {
-    return fetchAPI('/api/v1/services/discord/auth', {
+  // ✅ Initier l'OAuth2
+  initiateOAuth: async (userId: string) => {
+    return fetchAPI(`/api/v1/services/discord/oauth/authorize?userId=${userId}`);
+  },
+
+  // ✅ Déconnecter Discord
+  disconnect: async (userId: string) => {
+    return fetchAPI(`/api/v1/services/discord/oauth/disconnect?userId=${userId}`, {
       method: 'POST',
-      body: JSON.stringify({ botToken, guildId }),
     });
   },
 
-  // Récupérer les serveurs
+  // ✅ Récupérer les serveurs (guilds) de l'utilisateur
   getGuilds: async () => {
     return fetchAPI('/api/v1/services/discord/guilds');
+  },
+
+  // ✅ Récupérer les channels d'un serveur
+  getChannels: async (guildId: string) => {
+    return fetchAPI(`/api/v1/services/discord/guilds/${guildId}/channels`);
+  },
+
+  // ✅ Récupérer les rôles d'un serveur
+  getRoles: async (guildId: string) => {
+    return fetchAPI(`/api/v1/services/discord/guilds/${guildId}/roles`);
   },
 };
 

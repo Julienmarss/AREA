@@ -1,3 +1,4 @@
+// server/src/types/user.ts
 export interface User {
   id: string;
   email: string;
@@ -14,8 +15,21 @@ export interface User {
     };
     discord?: {
       connected: boolean;
+      accessToken?: string;
+      refreshToken?: string;
+      expiresIn?: number;
+      username?: string;
+      discriminator?: string;
+      userId?: string;
       botToken?: string;
       guildId?: string;
+      guilds?: Array<{
+        id: string;
+        name: string;
+        icon?: string;
+        owner: boolean;
+        permissions: string;
+      }>;
       connectedAt: Date;
     };
   };
