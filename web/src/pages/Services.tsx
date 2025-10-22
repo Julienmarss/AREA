@@ -6,6 +6,8 @@ import { ServiceStatus } from '../types/services';
 import GitHubConnect from '../components/services/GitHubConnect';
 import DiscordConnect from '../components/services/DiscordConnect';
 import SpotifyConnect from '../components/services/SpotifyConnect';
+import DiscordGuildsManager from '../components/discord/DiscordGuildsManager';
+import { AlertCircle, Info } from 'lucide-react';
 
 export default function Services() {
   const { user } = useAuth();
@@ -25,16 +27,26 @@ export default function Services() {
     loading: true 
   });
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   useEffect(() => {
-    loadStatuses();
-  }, []);
+    if (user?.id) {
+      loadStatuses();
+    }
+  }, [user?.id]);
 
   const loadStatuses = async () => {
-    const userId = user?.id || 'demo_user';
+    if (!user?.id) {
+      setLoadError('User not authenticated');
+      return;
+    }
+
+    const userId = user.id;
+    console.log('🔄 Loading service statuses for user:', userId);
     
     // Load GitHub status
     try {
-      console.log('🔍 Loading GitHub status for user:', userId);
+      console.log('🔍 Loading GitHub status...');
       const githubRes = await githubAPI.getStatus(userId);
       console.log('✅ GitHub status:', githubRes);
       
@@ -43,14 +55,18 @@ export default function Services() {
         loading: false,
         username: githubRes.username,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Failed to load GitHub status:', error);
-      setGithubStatus({ connected: false, loading: false });
+      setGithubStatus({ 
+        connected: false, 
+        loading: false,
+        error: error.message || 'Failed to load GitHub status'
+      });
     }
 
-    // ✅ Load Discord status (OAuth2)
+    // Load Discord status (avec userId)
     try {
-      console.log('🔍 Loading Discord status for user:', userId);
+      console.log('🔍 Loading Discord status...');
       const discordRes = await discordAPI.getStatus(userId);
       console.log('✅ Discord status:', discordRes);
       
@@ -61,55 +77,108 @@ export default function Services() {
         discriminator: discordRes.discriminator,
         guildCount: discordRes.guilds?.length || 0,
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Failed to load Discord status:', error);
-      setDiscordStatus({ connected: false, loading: false });
+      setDiscordStatus({ 
+        connected: false, 
+        loading: false,
+        error: error.message || 'Failed to load Discord status'
+      });
     }
 
     // Load Spotify status
     try {
+      console.log('🔍 Loading Spotify status...');
       const spotifyRes = await spotifyAPI.getStatus(userId);
+      console.log('✅ Spotify status:', spotifyRes);
+      
       setSpotifyStatus({
         connected: spotifyRes.connected,
         loading: false,
       });
-    } catch (error) {
-      setSpotifyStatus({ connected: false, loading: false });
+    } catch (error: any) {
+      console.error('❌ Failed to load Spotify status:', error);
+      setSpotifyStatus({ 
+        connected: false, 
+        loading: false,
+        error: error.message || 'Failed to load Spotify status'
+      });
     }
   };
 
   const handleConnectGitHub = async () => {
-    try {
-      const response = await githubAPI.initiateOAuth(user?.id || 'demo_user');
-      window.location.href = response.authUrl;
-    } catch (error: any) {
+    if (!user?.id) {
       setGithubStatus(prev => ({
         ...prev,
+        error: 'User not authenticated',
+      }));
+      return;
+    }
+
+    setGithubStatus(prev => ({ ...prev, loading: true, error: undefined }));
+    
+    try {
+      console.log('🔗 Initiating GitHub OAuth for user:', user.id);
+      const response = await githubAPI.initiateOAuth(user.id);
+      console.log('✅ Redirecting to:', response.authUrl);
+      window.location.href = response.authUrl;
+    } catch (error: any) {
+      console.error('❌ GitHub OAuth failed:', error);
+      setGithubStatus(prev => ({
+        ...prev,
+        loading: false,
         error: error.message || 'Failed to initiate OAuth',
       }));
     }
   };
 
-  // ✅ Nouvelle méthode pour Discord OAuth2
   const handleConnectDiscord = async () => {
-    try {
-      const response = await discordAPI.initiateOAuth(user?.id || 'demo_user');
-      window.location.href = response.authUrl;
-    } catch (error: any) {
+    if (!user?.id) {
       setDiscordStatus(prev => ({
         ...prev,
+        error: 'User not authenticated',
+      }));
+      return;
+    }
+
+    setDiscordStatus(prev => ({ ...prev, loading: true, error: undefined }));
+    
+    try {
+      console.log('🔗 Initiating Discord OAuth for user:', user.id);
+      const response = await discordAPI.initiateOAuth(user.id);
+      console.log('✅ Redirecting to:', response.authUrl);
+      window.location.href = response.authUrl;
+    } catch (error: any) {
+      console.error('❌ Discord OAuth failed:', error);
+      setDiscordStatus(prev => ({
+        ...prev,
+        loading: false,
         error: error.message || 'Failed to initiate OAuth',
       }));
     }
   };
 
   const handleConnectSpotify = async () => {
-    try {
-      const response = await spotifyAPI.initiateAuth(user?.id || 'demo_user');
-      window.location.href = response.authUrl;
-    } catch (error: any) {
+    if (!user?.id) {
       setSpotifyStatus(prev => ({
         ...prev,
+        error: 'User not authenticated',
+      }));
+      return;
+    }
+
+    setSpotifyStatus(prev => ({ ...prev, loading: true, error: undefined }));
+    
+    try {
+      console.log('Initiating Spotify OAuth for user:', user.id);
+      const response = await spotifyAPI.initiateAuth(user.id);
+      console.log('Redirecting to:', response.authUrl);
+      window.location.href = response.authUrl;
+    } catch (error: any) {
+      console.error('Spotify OAuth failed:', error);
+      setSpotifyStatus(prev => ({
+        ...prev,
+        loading: false,
         error: error.message || 'Failed to initiate OAuth',
       }));
     }
@@ -124,6 +193,29 @@ export default function Services() {
         </p>
       </div>
 
+      {/* Error Alert */}
+      {loadError && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-3">
+          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm text-red-800 font-medium">Error Loading Services</p>
+            <p className="text-sm text-red-600 mt-1">{loadError}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Info Alert */}
+      <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start space-x-3">
+        <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm text-blue-800 font-medium">OAuth Authentication</p>
+          <p className="text-sm text-blue-700 mt-1">
+            When you click "Connect", you'll be redirected to authorize the service. 
+            After authorization, you'll be redirected back to this page.
+          </p>
+        </div>
+      </div>
+
       <div className="space-y-6">
         <GitHubConnect status={githubStatus} onConnect={handleConnectGitHub} />
         <DiscordConnect status={discordStatus} onConnect={handleConnectDiscord} />
@@ -131,30 +223,69 @@ export default function Services() {
       </div>
 
       {/* Help Section */}
-      <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
-        <h3 className="text-lg font-semibold text-blue-900 mb-2">
+      <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Need help connecting services?
         </h3>
-        <ul className="space-y-2 text-sm text-blue-800">
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>
-              <strong>GitHub:</strong> Click "Connect with GitHub" to authorize via OAuth2
-            </span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>
-              <strong>Discord:</strong> Click "Connect with Discord" to authorize your account and select servers
-            </span>
-          </li>
-          <li className="flex items-start">
-            <span className="mr-2">•</span>
-            <span>
-              <strong>Spotify:</strong> Click the connect button to authorize via OAuth2
-            </span>
-          </li>
-        </ul>
+        
+        <div className="grid md:grid-cols-3 gap-6">
+          <div>
+            <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+              <span className="bg-gray-900 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs mr-2">
+                GH
+              </span>
+              GitHub
+            </h4>
+            <ul className="space-y-1 text-sm text-gray-700">
+              <li>• Click "Connect with GitHub"</li>
+              <li>• Authorize AREA application</li>
+              <li>• Grant access to repositories</li>
+              <li>• Create issues and PRs automatically</li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+              <span className="bg-indigo-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs mr-2">
+                DC
+              </span>
+              Discord
+            </h4>
+            <ul className="space-y-1 text-sm text-gray-700">
+              <li>• Click "Connect with Discord"</li>
+              <li>• Select your servers</li>
+              <li>• Authorize bot permissions</li>
+              <li>• Send and listen to messages</li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+              <span className="bg-green-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs mr-2">
+                SP
+              </span>
+              Spotify
+            </h4>
+            <ul className="space-y-1 text-sm text-gray-700">
+              <li>• Click "Connect with Spotify"</li>
+              <li>• Authorize access to your music</li>
+              <li>• Control playback</li>
+              <li>• Manage playlists automatically</li>
+            </ul>
+          </div>
+        </div>
+
+        <div className="mt-6 pt-6 border-t border-blue-200">
+          <p className="text-sm text-gray-600">
+            <strong>Troubleshooting:</strong> If you encounter any issues, make sure:
+          </p>
+          <ul className="mt-2 text-sm text-gray-600 space-y-1">
+            <li>• Popup blockers are disabled for this site</li>
+            <li>• You're logged into the service you want to connect</li>
+            <li>• The backend server is running properly</li>
+            <li>• Check the browser console for detailed error messages</li>
+          </ul>
+        </div>
       </div>
     </div>
   );

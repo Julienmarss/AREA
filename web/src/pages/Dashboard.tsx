@@ -1,3 +1,4 @@
+// web/src/pages/Dashboard.tsx
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Link } from 'react-router-dom';
@@ -16,45 +17,82 @@ export default function Dashboard() {
   const [servicesLoading, setServicesLoading] = useState(true);
 
   useEffect(() => {
-    loadDashboardData();
-  }, []);
+    if (user?.id) {
+      loadDashboardData();
+    }
+  }, [user?.id]);
 
-const loadDashboardData = async () => {
-  const userId = user?.id; // ✅ Utiliser le vrai userId
-  
-  // Charger les AREAs
-  try {
-    const areasData = await areasAPI.getAll(userId);
-    setAreas(areasData.areas || []);
-  } catch (error) {
-    console.error('Failed to load areas:', error);
-  } finally {
-    setLoading(false);
-  }
+  const loadDashboardData = async () => {
+    if (!user?.id) {
+      console.warn('⚠️ Cannot load dashboard: no user ID');
+      setLoading(false);
+      setServicesLoading(false);
+      return;
+    }
 
-  try {
-    const [github, discord, spotify] = await Promise.all([
-      githubAPI.getStatus(userId).catch(() => ({ authenticated: false })),
-      discordAPI.getStatus().catch(() => ({ authenticated: false })),
-      spotifyAPI.getStatus(userId || 'demo_user').catch(() => ({ connected: false })),
-    ]);
+    const userId = user.id;
+    console.log('📊 Loading dashboard data for user:', userId);
+    
+    // Charger les AREAs
+    try {
+      console.log('📋 Loading AREAs...');
+      const areasData = await areasAPI.getAll(userId);
+      console.log('✅ Loaded AREAs:', areasData.areas?.length || 0);
+      setAreas(areasData.areas || []);
+    } catch (error) {
+      console.error('❌ Failed to load areas:', error);
+    } finally {
+      setLoading(false);
+    }
 
-    setGithubConnected(github.authenticated);
-    setDiscordConnected(discord.authenticated);
-    setSpotifyConnected(spotify.connected);
-  } catch (error) {
-    console.error('Failed to load service statuses:', error);
-  } finally {
-    setServicesLoading(false);
-  }
-};
+    // Charger les statuts des services
+    try {
+      console.log('🔄 Loading service statuses...');
+      
+      // GitHub
+      try {
+        const github = await githubAPI.getStatus(userId);
+        console.log('✅ GitHub status:', github.authenticated);
+        setGithubConnected(github.authenticated);
+      } catch (error) {
+        console.error('❌ GitHub status failed:', error);
+        setGithubConnected(false);
+      }
+
+      // Discord - CORRECTION ICI
+      try {
+        const discord = await discordAPI.getStatus(userId);
+        console.log('✅ Discord status:', discord.authenticated);
+        setDiscordConnected(discord.authenticated);
+      } catch (error) {
+        console.error('❌ Discord status failed:', error);
+        setDiscordConnected(false);
+      }
+
+      // Spotify
+      try {
+        const spotify = await spotifyAPI.getStatus(userId);
+        console.log('✅ Spotify status:', spotify.connected);
+        setSpotifyConnected(spotify.connected);
+      } catch (error) {
+        console.error('❌ Spotify status failed:', error);
+        setSpotifyConnected(false);
+      }
+
+    } catch (error) {
+      console.error('❌ Failed to load service statuses:', error);
+    } finally {
+      setServicesLoading(false);
+    }
+  };
 
   const handleToggleArea = async (areaId: string) => {
     try {
+      console.log('🔄 Toggling AREA:', areaId);
       await areasAPI.toggle(areaId);
       await loadDashboardData();
     } catch (error) {
-      console.error('Failed to toggle area:', error);
+      console.error('❌ Failed to toggle area:', error);
     }
   };
 
@@ -62,10 +100,11 @@ const loadDashboardData = async () => {
     if (!confirm('Are you sure you want to delete this AREA?')) return;
     
     try {
+      console.log('🗑️ Deleting AREA:', areaId);
       await areasAPI.delete(areaId);
       await loadDashboardData();
     } catch (error) {
-      console.error('Failed to delete area:', error);
+      console.error('❌ Failed to delete area:', error);
     }
   };
 
@@ -90,7 +129,11 @@ const loadDashboardData = async () => {
             <div>
               <p className="text-sm text-gray-600">Connected Services</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">
-                {servicesLoading ? '-' : `${connectedServicesCount}/3`}
+                {servicesLoading ? (
+                  <Loader className="h-8 w-8 text-gray-400 animate-spin" />
+                ) : (
+                  `${connectedServicesCount}/3`
+                )}
               </p>
             </div>
             <Settings className="h-10 w-10 text-indigo-600" />
@@ -102,7 +145,11 @@ const loadDashboardData = async () => {
             <div>
               <p className="text-sm text-gray-600">Active AREAs</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">
-                {loading ? '-' : areas.filter(a => a.enabled).length}
+                {loading ? (
+                  <Loader className="h-8 w-8 text-gray-400 animate-spin" />
+                ) : (
+                  areas.filter(a => a.enabled).length
+                )}
               </p>
             </div>
             <Zap className="h-10 w-10 text-green-600" />
@@ -114,7 +161,11 @@ const loadDashboardData = async () => {
             <div>
               <p className="text-sm text-gray-600">Total AREAs</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">
-                {loading ? '-' : areas.length}
+                {loading ? (
+                  <Loader className="h-8 w-8 text-gray-400 animate-spin" />
+                ) : (
+                  areas.length
+                )}
               </p>
             </div>
             <Zap className="h-10 w-10 text-purple-600" />

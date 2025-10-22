@@ -8,6 +8,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Services from './pages/Services';
 import CreateArea from './pages/areas/CreateArea';
+import OAuthCallback from './pages/OAuthCallback';
 
 function App() {
   return (
@@ -19,6 +20,9 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
+            
+            {/* OAuth callback route */}
+            <Route path="/oauth/callback" element={<OAuthCallback />} />
 
             {/* Protected routes */}
             <Route 
