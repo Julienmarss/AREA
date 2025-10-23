@@ -2,94 +2,65 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { CheckCircle, XCircle, Loader } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 export default function OAuthCallback() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [message, setMessage] = useState('Processing Discord authentication...');
+  const [message, setMessage] = useState('Processing authentication...');
 
   useEffect(() => {
-    const code = searchParams.get('code');
-    const state = searchParams.get('state');
+    const connected = searchParams.get('connected');
     const error = searchParams.get('error');
 
-    console.log('🔍 OAuth Callback params:', { code: !!code, state: !!state, error });
+    console.log('🔍 OAuth Callback params:', { connected, error });
 
     if (error) {
-      setStatus('error');
-      setMessage(decodeURIComponent(error));
-      setTimeout(() => navigate('/services'), 5000);
-      return;
-    }
-
-    if (code && state) {
-      handleDiscordCallback(code, state);
+      handleError(error);
+    } else if (connected) {
+      handleSuccess(connected);
     } else {
       setStatus('error');
-      setMessage('Missing code or state parameter');
+      setMessage('No status received from server');
       setTimeout(() => navigate('/services'), 3000);
     }
-  }, []);
+  }, [searchParams, navigate]);
 
-  const handleDiscordCallback = async (code: string, state: string) => {
-    try {
-      console.log('🔄 Processing Discord callback...');
+const handleSuccess = (service: string) => {
+  console.log('✅ Service connected:', service);
+  setStatus('success');
+  
+  const guildName = searchParams.get('guild');
+  
+  const serviceNames: Record<string, string> = {
+    discord: guildName ? `Discord (Server: ${guildName})` : 'Discord',
+    github: 'GitHub',
+    spotify: 'Spotify'
+  };
+  
+  setMessage(`${serviceNames[service] || service} connected successfully! 🎉`);
+  
+  setTimeout(() => {
+    navigate('/services');
+  }, 2000);
+};
 
-      // Décoder le state pour obtenir le userId
-      let userId = user?.id;
-      
-      try {
-        const stateData = JSON.parse(atob(state));
-        userId = stateData.userId || userId;
-      } catch (e) {
-        console.warn('⚠️ Could not parse state, using current user');
-      }
-
-      if (!userId) {
-        throw new Error('User not authenticated');
-      }
-
-      console.log('📤 Sending code to backend...', { userId });
-
-      // Envoyer le code au backend
-      const response = await fetch(`${API_URL}/api/v1/services/discord/oauth/exchange`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('area_token')}`,
-        },
-        body: JSON.stringify({ code, userId }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to connect Discord');
-      }
-
-      console.log('✅ Discord connected:', data);
-
-      setStatus('success');
-      setMessage(`Discord connected! Welcome ${data.username || 'User'}!`);
-      
-      setTimeout(() => {
-        navigate('/services');
-      }, 2000);
-
-    } catch (error: any) {
-      console.error('❌ Discord callback error:', error);
-      setStatus('error');
-      setMessage(error.message || 'Failed to connect Discord');
-      
-      setTimeout(() => {
-        navigate('/services');
-      }, 5000);
-    }
+  const handleError = (error: string) => {
+    console.error('❌ OAuth error:', error);
+    setStatus('error');
+    
+    const errorMessages: Record<string, string> = {
+      'access_denied': 'You denied access to the application',
+      'no_guild': 'No Discord server found. Please join a server first.',
+      'bot_not_configured': 'Discord bot is not configured on the server',
+      'auth_failed': 'Authentication failed. Please try again.',
+    };
+    
+    setMessage(errorMessages[error] || `Error: ${error}`);
+    
+    setTimeout(() => {
+      navigate('/services');
+    }, 5000);
   };
 
   return (
@@ -100,7 +71,7 @@ export default function OAuthCallback() {
             <>
               <Loader className="h-16 w-16 text-indigo-600 mx-auto mb-4 animate-spin" />
               <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Connecting Discord...
+                Connecting...
               </h2>
               <p className="text-gray-600">{message}</p>
             </>
