@@ -2,6 +2,7 @@ import { AREA, InMemoryDB } from '../models/area.model';
 import { GitHubService } from './GitHubService';
 import { DiscordService } from './DiscordService';
 import { SpotifyService } from './spotify.service';
+import { NotionService } from './NotionService';
 import { userStorage } from '../storage/UserStorage';
 
 /**
@@ -93,6 +94,20 @@ export class AreaExecutor {
       }
     }
 
+    if (area.action.service === 'notion') {
+      if (config.databaseId && triggerData.databaseId !== config.databaseId) {
+        return false;
+      }
+
+      if (config.parentPageId && triggerData.parentPageId !== config.parentPageId) {
+        return false;
+      }
+
+      if (config.propertyName && triggerData.propertyName !== config.propertyName) {
+        return false;
+      }
+    }
+
     return true;
   }
 
@@ -114,6 +129,10 @@ export class AreaExecutor {
 
       case 'spotify':
         await this.executeSpotifyReaction(area.userId, type, enrichedConfig, triggerData);
+        break;
+
+      case 'notion':
+        await this.executeNotionReaction(area.userId, type, enrichedConfig, triggerData);
         break;
 
       default:
@@ -170,6 +189,12 @@ export class AreaExecutor {
     if (triggerData.trackName) {
       result = result.replace(/\{\{track\.name\}\}/g, triggerData.trackName || '');
       result = result.replace(/\{\{track\.artist\}\}/g, triggerData.artistName || '');
+    }
+
+    if (triggerData.pageId) {
+      result = result.replace(/\{\{notion\.pageId\}\}/g, triggerData.pageId || '');
+      result = result.replace(/\{\{notion\.url\}\}/g, triggerData.url || '');
+      result = result.replace(/\{\{notion\.databaseId\}\}/g, triggerData.databaseId || '');
     }
 
     return result;
@@ -349,5 +374,47 @@ export class AreaExecutor {
         break;
       }
     }
+  }
+
+  private static async executeNotionReaction(
+    userId: string,
+    reactionType: string,
+    config: any,
+    triggerData: any
+  ): Promise<void> {
+    console.log(`🔧 Executing Notion reaction for user: ${userId}`);
+
+    // Créer une instance dédiée
+    const notionService = new NotionService();
+
+    // Récupérer les données Notion depuis InMemoryDB
+    const token = InMemoryDB.getToken(userId, 'notion');
+
+    if (!token?.accessToken) {
+      console.error(`❌ No Notion token found for user ${userId}`);
+      throw new Error('Notion not authenticated for this user');
+    }
+
+    console.log(`✅ Found Notion token for user ${userId}`);
+
+    // Authentifier le service avec le token
+    const authenticated = await notionService.authenticate(userId, {
+      access_token: token.accessToken,
+      bot_id: token.metadata?.bot_id || '',
+      workspace_id: token.metadata?.workspace_id || '',
+      workspace_name: token.metadata?.workspace_name || '',
+      workspace_icon: token.metadata?.workspace_icon || '',
+      owner: { type: 'user' }
+    });
+
+    if (!authenticated) {
+      console.error(`❌ Failed to authenticate Notion service for user ${userId}`);
+      throw new Error('Notion authentication failed');
+    }
+
+    console.log(`✅ Notion service authenticated for user ${userId}`);
+
+    // Exécuter la réaction
+    await notionService.executeReaction(reactionType, userId, config, triggerData);
   }
 }
