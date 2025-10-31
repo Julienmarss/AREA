@@ -32,10 +32,10 @@ export interface AREA {
 // Interface pour les tokens OAuth
 export interface UserToken {
   userId: string;
-  service: string;  // 'spotify'
+  service: string;  // 'spotify', 'notion', etc.
   accessToken: string;
-  refreshToken: string;
-  expiresAt: Date;
+  refreshToken?: string;  // Optional: some services like Notion don't have refresh tokens
+  expiresAt?: Date;  // Optional: some services like Notion tokens don't expire
   createdAt: Date;
   metadata?: {
     bot_id?: string;
