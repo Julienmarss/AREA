@@ -23,6 +23,7 @@ export interface User {
       userId?: string;
       botToken?: string;
       guildId?: string;
+      guildName?: string;
       guilds?: Array<{
         id: string;
         name: string;

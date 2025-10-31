@@ -1,4 +1,3 @@
-// server/src/controllers/discord.controller.ts
 import { Request, Response } from 'express';
 import { getDiscordAuthUrl } from '../config/discord';
 import { DiscordService } from '../services/DiscordService';
@@ -15,7 +14,6 @@ export class DiscordController {
   static initiateAuth(req: Request, res: Response) {
     const userId = req.query.userId as string || 'demo_user';
     
-    // Encoder les données dans le state pour les récupérer au callback
     const state = Buffer.from(JSON.stringify({
       userId: userId,
       timestamp: Date.now(),
@@ -36,140 +34,97 @@ static async callback(req: Request, res: Response) {
   const { code, state, error, guild_id } = req.query;
   
   console.log('📥 Discord callback received');
-  console.log('  Code:', code ? 'present' : 'missing');
-  console.log('  State:', state ? 'present' : 'missing');
-  console.log('  Guild ID:', guild_id || 'not provided'); // ✅ Le serveur choisi par l'utilisateur
+  console.log('  Code:', code ? '✅' : '❌');
+  console.log('  State:', state ? '✅' : '❌');
+  console.log('  Guild ID:', guild_id || '❌ not provided');
   console.log('  Error:', error || 'none');
+  
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
   
   if (error) {
     console.error('❌ Discord OAuth error:', error);
-    return res.redirect(`${process.env.FRONTEND_URL}/services?error=${error}`);
+    return res.redirect(`${frontendUrl}/services?error=${error}`);
   }
   
   if (!code || !state) {
     console.error('❌ Missing code or state');
-    return res.status(400).json({ error: 'Missing code or state' });
+    return res.redirect(`${frontendUrl}/services?error=missing_params`);
   }
   
   try {
-    // Décoder le state pour récupérer le userId
     const stateData = JSON.parse(
       Buffer.from(state as string, 'base64').toString()
     );
     const userId = stateData.userId;
     
-    console.log('🔐 Exchanging Discord code for token...');
-    console.log('  User ID:', userId);
+    console.log('🔐 Processing Discord OAuth for user:', userId);
     
-    // Échanger le code contre un access token
-    const params = new URLSearchParams();
-    params.append('client_id', process.env.DISCORD_CLIENT_ID!);
-    params.append('client_secret', process.env.DISCORD_CLIENT_SECRET!);
-    params.append('grant_type', 'authorization_code');
-    params.append('code', code as string);
-    params.append('redirect_uri', process.env.DISCORD_REDIRECT_URI!);
-    
-    const tokenResponse = await axios.post(
-      'https://discord.com/api/oauth2/token',
-      params,
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      }
-    );
-    
-    const { access_token } = tokenResponse.data;
-    
-    if (!access_token) {
-      throw new Error('No access token received from Discord');
-    }
-    
-    console.log('✅ Got Discord user access token');
-    
-    // Récupérer les infos utilisateur Discord
-    const userResponse = await axios.get('https://discord.com/api/users/@me', {
-      headers: {
-        'Authorization': `Bearer ${access_token}`
-      }
-    });
-    
-    const discordUser = userResponse.data;
-    console.log('✅ Got Discord user info:', discordUser.username);
-    
-    // Récupérer les guilds de l'utilisateur
-    const guildsResponse = await axios.get('https://discord.com/api/users/@me/guilds', {
-      headers: {
-        'Authorization': `Bearer ${access_token}`
-      }
-    });
-    
-    const guilds = guildsResponse.data;
-    console.log('✅ Got user guilds:', guilds.length);
-    
-    // ✅ UTILISER LE GUILD_ID fourni par Discord OAuth (le serveur où le bot a été ajouté)
     const selectedGuildId = guild_id as string;
     
     if (!selectedGuildId) {
-      console.error('❌ No guild selected - user did not add bot to a server');
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
+      console.error('❌ No guild selected');
       return res.redirect(`${frontendUrl}/services?error=no_guild_selected`);
     }
     
-    console.log('✅ Bot added to guild:', selectedGuildId);
+    console.log('✅ Guild selected:', selectedGuildId);
     
-    // ✅ UTILISER LE BOT TOKEN depuis .env
-    const botToken = process.env.DISCORD_BOT_TOKEN;
+    const { getDiscordClient } = await import('../middleware/autoReactions');
+    const client = getDiscordClient();
     
-    if (!botToken) {
-      console.error('❌ DISCORD_BOT_TOKEN not configured in .env');
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
-      return res.redirect(`${frontendUrl}/services?error=bot_not_configured`);
+    if (!client || !client.isReady()) {
+      console.error('❌ Discord bot is not online');
+      return res.redirect(`${frontendUrl}/services?error=bot_offline`);
     }
     
-    console.log('🤖 Authenticating Discord service with BOT token...');
+    console.log('🤖 Discord bot status:');
+    console.log('   Bot user:', client.user?.tag);
+    console.log('   Guilds count:', client.guilds.cache.size);
     
-    // Authentifier le service Discord avec le BOT TOKEN
+    console.log('⏳ Waiting for guild propagation...');
+    await new Promise(resolve => setTimeout(resolve, 3000)); // 3 secondes
+    
+    await client.guilds.fetch();
+    
+    let guild = client.guilds.cache.get(selectedGuildId);
+    
+    if (!guild) {
+      console.error('❌ Bot not in guild:', selectedGuildId);
+      console.error('   Available guilds:');
+      client.guilds.cache.forEach(g => {
+        console.error(`     - ${g.name} (${g.id})`);
+      });
+      
+      return res.redirect(`${frontendUrl}/services?error=bot_not_in_guild&guild_id=${selectedGuildId}`);
+    }
+    
+    console.log('✅ Bot found in guild:', guild.name);
+    
     const success = await discordService.authenticate(userId, { 
-      botToken,
       guildId: selectedGuildId
     });
     
     if (!success) {
-      throw new Error('Discord service authentication failed - bot may not have access to guild');
+      console.error('❌ Service authentication failed');
+      return res.redirect(`${frontendUrl}/services?error=service_auth_failed`);
     }
     
-    // Trouver le nom du serveur sélectionné
-    const selectedGuild = guilds.find((g: any) => g.id === selectedGuildId);
-    
-    // Sauvegarder dans le userStorage
     userStorage.updateServices(userId, 'discord', {
-      username: discordUser.username,
-      discriminator: discordUser.discriminator,
-      userId: discordUser.id,
+      userId: userId,
       guildId: selectedGuildId,
-      guildName: selectedGuild?.name || 'Unknown Server', // ✅ Nom du serveur
-      guilds: guilds.map((g: any) => ({
-        id: g.id,
-        name: g.name,
-        icon: g.icon,
-        owner: g.owner,
-        permissions: g.permissions
-      })),
+      guildName: guild.name,
       connectedAt: new Date()
     });
     
-    console.log(`✅ Discord authenticated for user ${userId}`);
-    console.log(`   - Username: ${discordUser.username}#${discordUser.discriminator}`);
-    console.log(`   - Server: ${selectedGuild?.name} (${selectedGuildId})`);
+    console.log('✅ Discord authenticated successfully');
+    console.log(`   User: ${userId}`);
+    console.log(`   Server: ${guild.name} (${selectedGuildId})`);
     
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
-    return res.redirect(`${frontendUrl}/services?connected=discord&guild=${encodeURIComponent(selectedGuild?.name || 'Unknown')}`);
+    return res.redirect(`${frontendUrl}/services?connected=discord&guild=${encodeURIComponent(guild.name)}`);
     
   } catch (error: any) {
-    console.error('❌ Discord OAuth callback error:', error.response?.data || error.message);
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
-    return res.redirect(`${frontendUrl}/services?error=auth_failed`);
+    console.error('❌ Discord OAuth callback error:', error.message);
+    console.error('   Stack:', error.stack);
+    return res.redirect(`${frontendUrl}/services?error=auth_failed&details=${encodeURIComponent(error.message)}`);
   }
 }
   
@@ -182,10 +137,8 @@ static async callback(req: Request, res: Response) {
       
       console.log('🔍 Checking Discord status for user:', userId);
       
-      // Vérifier dans le service
       const isAuthenticated = await discordService.isAuthenticated(userId);
       
-      // Récupérer les infos du userStorage
       const user = userStorage.findById(userId);
       const discordData = user?.services?.discord;
       
@@ -222,7 +175,6 @@ static async callback(req: Request, res: Response) {
       
       console.log('🔌 Disconnecting Discord for user:', userId);
       
-      // Supprimer du userStorage
       const user = userStorage.findById(userId);
       if (user) {
         userStorage.updateServices(userId, 'discord', {
@@ -230,7 +182,6 @@ static async callback(req: Request, res: Response) {
         });
       }
       
-      // Déconnecter du service (détruit le client)
       const client = (discordService as any).userClients.get(userId);
       if (client) {
         client.destroy();

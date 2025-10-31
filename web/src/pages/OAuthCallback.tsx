@@ -12,38 +12,42 @@ export default function OAuthCallback() {
   useEffect(() => {
     const connected = searchParams.get('connected');
     const error = searchParams.get('error');
-
-    console.log('🔍 OAuth Callback params:', { connected, error });
+    
+    // Récupérer tous les paramètres pour debug
+    const allParams = Object.fromEntries(searchParams.entries());
+    console.log('🔍 OAuth Callback - All params:', allParams);
 
     if (error) {
       handleError(error);
     } else if (connected) {
       handleSuccess(connected);
     } else {
+      // Si ni 'connected' ni 'error', il y a un problème
+      console.error('❌ No status in callback:', allParams);
       setStatus('error');
-      setMessage('No status received from server');
-      setTimeout(() => navigate('/services'), 3000);
+      setMessage(`No status received from server. Params: ${JSON.stringify(allParams)}`);
+      setTimeout(() => navigate('/services'), 5000);
     }
   }, [searchParams, navigate]);
 
-const handleSuccess = (service: string) => {
-  console.log('✅ Service connected:', service);
-  setStatus('success');
-  
-  const guildName = searchParams.get('guild');
-  
-  const serviceNames: Record<string, string> = {
-    discord: guildName ? `Discord (Server: ${guildName})` : 'Discord',
-    github: 'GitHub',
-    spotify: 'Spotify'
+  const handleSuccess = (service: string) => {
+    console.log('✅ Service connected:', service);
+    setStatus('success');
+    
+    const guildName = searchParams.get('guild');
+    
+    const serviceNames: Record<string, string> = {
+      discord: guildName ? `Discord (Server: ${guildName})` : 'Discord',
+      github: 'GitHub',
+      spotify: 'Spotify'
+    };
+    
+    setMessage(`${serviceNames[service] || service} connected successfully! 🎉`);
+    
+    setTimeout(() => {
+      navigate('/services');
+    }, 2000);
   };
-  
-  setMessage(`${serviceNames[service] || service} connected successfully! 🎉`);
-  
-  setTimeout(() => {
-    navigate('/services');
-  }, 2000);
-};
 
   const handleError = (error: string) => {
     console.error('❌ OAuth error:', error);
@@ -54,6 +58,10 @@ const handleSuccess = (service: string) => {
       'no_guild': 'No Discord server found. Please join a server first.',
       'bot_not_configured': 'Discord bot is not configured on the server',
       'auth_failed': 'Authentication failed. Please try again.',
+      'missing_params': 'Missing parameters in callback. Please try again.',
+      'token_exchange_failed': 'Failed to exchange authorization code. Please try again.',
+      'user_fetch_failed': 'Failed to fetch user information. Please try again.',
+      'server_error': 'Server error occurred. Please try again later.',
     };
     
     setMessage(errorMessages[error] || `Error: ${error}`);

@@ -238,30 +238,62 @@ router.post('/reactions/:reactionId/execute', authenticate, [
 router.get('/guilds', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
+    console.log('📋 Fetching guilds for user:', userId);
 
-    const isAuthenticated = await discordService.isAuthenticated(userId);
-    if (!isAuthenticated) {
+    const user = userStorage.findById(userId);
+    const discordData = user?.services?.discord;
+
+    if (!discordData || !discordData.connected) {
       return res.status(401).json({
         error: 'Not authenticated',
         message: 'User must be authenticated with Discord first'
       });
     }
 
-    const user = userStorage.findById(userId);
-    const discordData = user?.services.discord;
-
-    if (discordData?.guilds) {
-      res.json({
-        guilds: discordData.guilds
-      });
-    } else {
-      res.json({
-        guilds: [],
-        message: 'No guilds found. Please reconnect with Discord.'
+    if (!discordData.guildId) {
+      return res.status(400).json({
+        error: 'Bad request',
+        message: 'No Discord server associated with your account'
       });
     }
+
+    console.log('User is authenticated with Discord');
+    console.log('   Guild ID:', discordData.guildId);
+    console.log('   Guild Name:', discordData.guildName || 'N/A');
+
+    const { getDiscordClient } = await import('../middleware/autoReactions');
+    const client = getDiscordClient();
+
+    if (!client || !client.isReady()) {
+      return res.status(500).json({
+        error: 'Service unavailable',
+        message: 'Discord bot is not online'
+      });
+    }
+
+    const guild = client.guilds.cache.get(discordData.guildId);
+
+    if (!guild) {
+      console.error('❌ Bot not in user guild:', discordData.guildId);
+      return res.status(404).json({
+        error: 'Guild not found',
+        message: 'Bot is not in your connected server'
+      });
+    }
+
+    console.log('✅ Found guild:', guild.name);
+
+    res.json({
+      guilds: [{
+        id: guild.id,
+        name: guild.name,
+        icon: guild.icon,
+        owner: false,
+        permissions: '0'
+      }]
+    });
   } catch (error) {
-    console.error('Failed to get Discord guilds:', error);
+    console.error('❌ Failed to get Discord guilds:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -341,43 +373,69 @@ router.get('/guilds/:guildId/channels', authenticate, async (req: AuthRequest, r
     const { guildId } = req.params;
     const userId = req.user!.id;
 
-    // Vérifier l'authentification
-    const isAuthenticated = await discordService.isAuthenticated(userId);
-    if (!isAuthenticated) {
+    console.log('📋 Fetching channels for guild:', guildId, 'user:', userId);
+
+    const user = userStorage.findById(userId);
+    const discordData = user?.services?.discord;
+
+    if (!discordData || !discordData.connected) {
+      console.error('❌ User not connected to Discord');
       return res.status(401).json({
         error: 'Not authenticated',
         message: 'User must be authenticated with Discord first'
       });
     }
 
-    // Récupérer le client Discord de l'utilisateur
-    const client = (discordService as any).userClients.get(userId);
-    if (!client || !client.isReady()) {
-      return res.status(500).json({ error: 'Discord client not ready' });
+    if (!discordData.guildId) {
+      console.error('❌ No guild associated with user');
+      return res.status(400).json({
+        error: 'Bad request',
+        message: 'No Discord server associated with your account'
+      });
     }
 
-    // Récupérer le serveur
+    if (discordData.guildId !== guildId) {
+      console.error('❌ User not connected to this guild');
+      console.error('   User guild:', discordData.guildId);
+      console.error('   Requested guild:', guildId);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You can only access channels from your connected server'
+      });
+    }
+
+    const { getDiscordClient } = await import('../middleware/autoReactions');
+    const client = getDiscordClient();
+
+    if (!client || !client.isReady()) {
+      console.error('❌ Discord bot not ready');
+      return res.status(500).json({ error: 'Discord bot not ready' });
+    }
+
     const guild = await client.guilds.fetch(guildId);
     if (!guild) {
+      console.error('❌ Guild not found:', guildId);
       return res.status(404).json({ error: 'Guild not found' });
     }
 
-    // Récupérer tous les channels
+    console.log('✅ Found guild:', guild.name);
+
     const channels = await guild.channels.fetch();
     
-    // Filtrer et formater les channels texte
     const textChannels = channels
-      .filter((channel: any) => channel.type === 0) // 0 = GUILD_TEXT
+      .filter((channel: any) => channel && channel.type === 0)
       .map((channel: any) => ({
         id: channel.id,
         name: channel.name,
-        type: 'text',
+        type: channel.type,
         category: channel.parent?.name,
       }));
 
+    console.log('✅ Found', textChannels.length, 'text channels');
+
     res.json({ channels: textChannels });
   } catch (error) {
-    console.error('Failed to get Discord channels:', error);
+    console.error('❌ Failed to get Discord channels:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
@@ -388,7 +446,6 @@ router.get('/guilds/:guildId/roles', authenticate, async (req: AuthRequest, res:
     const { guildId } = req.params;
     const userId = req.user!.id;
 
-    // Vérifier l'authentification
     const isAuthenticated = await discordService.isAuthenticated(userId);
     if (!isAuthenticated) {
       return res.status(401).json({
@@ -397,22 +454,18 @@ router.get('/guilds/:guildId/roles', authenticate, async (req: AuthRequest, res:
       });
     }
 
-    // Récupérer le client Discord de l'utilisateur
     const client = (discordService as any).userClients.get(userId);
     if (!client || !client.isReady()) {
       return res.status(500).json({ error: 'Discord client not ready' });
     }
 
-    // Récupérer le serveur
     const guild = await client.guilds.fetch(guildId);
     if (!guild) {
       return res.status(404).json({ error: 'Guild not found' });
     }
 
-    // Récupérer tous les rôles
     const roles = await guild.roles.fetch();
     
-    // Filtrer et formater les rôles (exclure @everyone)
     const formattedRoles = roles
       .filter((role: any) => role.name !== '@everyone')
       .map((role: any) => ({
