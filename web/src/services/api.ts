@@ -136,6 +136,36 @@ export const spotifyAPI = {
   },
 };
 
+// ============= NOTION API =============
+export const notionAPI = {
+  // Vérifier le statut de connexion
+  getStatus: async (userId: string) => {
+    return fetchAPI(`/api/v1/services/notion/status?userId=${userId}`);
+  },
+
+  // Initier l'OAuth
+  initiateOAuth: async (userId: string) => {
+    return fetchAPI(`/api/v1/services/notion/oauth/authorize?userId=${userId}`);
+  },
+
+  // Déconnecter
+  disconnect: async (userId: string) => {
+    return fetchAPI(`/api/v1/services/notion/disconnect?userId=${userId}`, {
+      method: 'POST',
+    });
+  },
+
+  // Récupérer les pages Notion
+  getPages: async (userId: string) => {
+    return fetchAPI(`/api/v1/services/notion/pages?userId=${userId}`);
+  },
+
+  // Récupérer les databases Notion
+  getDatabases: async (userId: string) => {
+    return fetchAPI(`/api/v1/services/notion/databases?userId=${userId}`);
+  },
+};
+
 // ============= AREAS API =============
 export const areasAPI = {
   // Récupérer toutes les AREAs

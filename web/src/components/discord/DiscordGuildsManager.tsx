@@ -76,7 +76,7 @@ export default function DiscordGuildsManager() {
     return <Hash className="h-4 w-4 text-gray-500" />;
   };
 
-  const copyChannelId = (channelId: string, channelName: string) => {
+  const copyChannelId = (channelId: string, _channelName: string) => {
     navigator.clipboard.writeText(channelId);
     alert(`Channel ID copied: ${channelId}\nYou can use this ID when creating AREAs`);
   };
