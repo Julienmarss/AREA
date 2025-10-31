@@ -37,6 +37,13 @@ export interface UserToken {
   refreshToken: string;
   expiresAt: Date;
   createdAt: Date;
+  metadata?: {
+    bot_id?: string;
+    workspace_id?: string;
+    workspace_name?: string;
+    workspace_icon?: string;
+    [key: string]: any;  // Allow additional metadata fields
+  };
 }
 
 // Base de données en mémoire temporaire (remplacer par PostgreSQL)
