@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { discordAPI } from '../../services/api';
-import { Server, Hash, Loader, AlertCircle } from 'lucide-react';
+import { Loader, AlertCircle } from 'lucide-react';
 
 interface Guild {
   id: string;

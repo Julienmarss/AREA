@@ -1,12 +1,12 @@
 // web/src/pages/Services.tsx
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { githubAPI, discordAPI, spotifyAPI } from '../services/api';
+import { githubAPI, discordAPI, spotifyAPI, notionAPI } from '../services/api';
 import { ServiceStatus } from '../types/services';
 import GitHubConnect from '../components/services/GitHubConnect';
 import DiscordConnect from '../components/services/DiscordConnect';
 import SpotifyConnect from '../components/services/SpotifyConnect';
-import DiscordGuildsManager from '../components/discord/DiscordGuildsManager';
+import NotionConnect from '../components/services/NotionConnect';
 import { AlertCircle, Info } from 'lucide-react';
 
 export default function Services() {
@@ -22,9 +22,14 @@ export default function Services() {
     loading: true 
   });
   
-  const [spotifyStatus, setSpotifyStatus] = useState<ServiceStatus>({ 
-    connected: false, 
-    loading: true 
+  const [spotifyStatus, setSpotifyStatus] = useState<ServiceStatus>({
+    connected: false,
+    loading: true
+  });
+
+  const [notionStatus, setNotionStatus] = useState<ServiceStatus>({
+    connected: false,
+    loading: true
   });
 
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -91,17 +96,37 @@ export default function Services() {
       console.log('🔍 Loading Spotify status...');
       const spotifyRes = await spotifyAPI.getStatus(userId);
       console.log('✅ Spotify status:', spotifyRes);
-      
+
       setSpotifyStatus({
         connected: spotifyRes.connected,
         loading: false,
       });
     } catch (error: any) {
       console.error('❌ Failed to load Spotify status:', error);
-      setSpotifyStatus({ 
-        connected: false, 
+      setSpotifyStatus({
+        connected: false,
         loading: false,
         error: error.message || 'Failed to load Spotify status'
+      });
+    }
+
+    // Load Notion status
+    try {
+      console.log('🔍 Loading Notion status...');
+      const notionRes = await notionAPI.getStatus(userId);
+      console.log('✅ Notion status:', notionRes);
+
+      setNotionStatus({
+        connected: notionRes.authenticated || notionRes.connected,
+        loading: false,
+        username: notionRes.workspace_name,
+      });
+    } catch (error: any) {
+      console.error('❌ Failed to load Notion status:', error);
+      setNotionStatus({
+        connected: false,
+        loading: false,
+        error: error.message || 'Failed to load Notion status'
       });
     }
   };
@@ -168,7 +193,7 @@ export default function Services() {
     }
 
     setSpotifyStatus(prev => ({ ...prev, loading: true, error: undefined }));
-    
+
     try {
       console.log('Initiating Spotify OAuth for user:', user.id);
       const response = await spotifyAPI.initiateAuth(user.id);
@@ -177,6 +202,32 @@ export default function Services() {
     } catch (error: any) {
       console.error('Spotify OAuth failed:', error);
       setSpotifyStatus(prev => ({
+        ...prev,
+        loading: false,
+        error: error.message || 'Failed to initiate OAuth',
+      }));
+    }
+  };
+
+  const handleConnectNotion = async () => {
+    if (!user?.id) {
+      setNotionStatus(prev => ({
+        ...prev,
+        error: 'User not authenticated',
+      }));
+      return;
+    }
+
+    setNotionStatus(prev => ({ ...prev, loading: true, error: undefined }));
+
+    try {
+      console.log('🔗 Initiating Notion OAuth for user:', user.id);
+      const response = await notionAPI.initiateOAuth(user.id);
+      console.log('✅ Redirecting to:', response.authUrl);
+      window.location.href = response.authUrl;
+    } catch (error: any) {
+      console.error('❌ Notion OAuth failed:', error);
+      setNotionStatus(prev => ({
         ...prev,
         loading: false,
         error: error.message || 'Failed to initiate OAuth',
@@ -220,6 +271,7 @@ export default function Services() {
         <GitHubConnect status={githubStatus} onConnect={handleConnectGitHub} />
         <DiscordConnect status={discordStatus} onConnect={handleConnectDiscord} />
         <SpotifyConnect status={spotifyStatus} onConnect={handleConnectSpotify} />
+        <NotionConnect status={notionStatus} onConnect={handleConnectNotion} />
       </div>
 
       {/* Help Section */}
@@ -228,7 +280,7 @@ export default function Services() {
           Need help connecting services?
         </h3>
         
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-4 gap-6">
           <div>
             <h4 className="font-medium text-gray-900 mb-2 flex items-center">
               <span className="bg-gray-900 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs mr-2">
@@ -271,6 +323,21 @@ export default function Services() {
               <li>• Authorize access to your music</li>
               <li>• Control playback</li>
               <li>• Manage playlists automatically</li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+              <span className="bg-gray-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs mr-2">
+                NT
+              </span>
+              Notion
+            </h4>
+            <ul className="space-y-1 text-sm text-gray-700">
+              <li>• Click "Connect with Notion"</li>
+              <li>• Select your workspace</li>
+              <li>• Authorize access to pages</li>
+              <li>• Automate databases and content</li>
             </ul>
           </div>
         </div>
