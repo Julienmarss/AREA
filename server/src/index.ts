@@ -13,10 +13,12 @@ import spotifyRoutes from './routes/spotify.routes';
 import areasRoutes from './routes/areas.routes';
 import discordRoutes from './routes/discord';
 import githubRoutes from './routes/github';
+import notionRoutes from './routes/notion.routes';
 
 import { HooksService } from './services/hooks.service';
 import { DiscordService } from './services/DiscordService';
 import { GitHubService } from './services/GitHubService';
+import { NotionService } from './services/NotionService';
 
 import { setupAutoReactions } from './middleware/autoReactions';
 
@@ -120,6 +122,20 @@ app.get('/about.json', (req: Request, res: Response) => {
             { name: 'follow_artist', description: 'Follow an artist' },
             { name: 'create_playlist_with_artist_top_tracks', description: 'Create a playlist with artist top 5 tracks' }
           ]
+        },
+        {
+          name: 'notion',
+          actions: [
+            { name: 'database_item_created', description: 'Triggered when a new item is added to a Notion database' },
+            { name: 'database_item_updated', description: 'Triggered when an item in a Notion database is updated' },
+            { name: 'page_created', description: 'Triggered when a new page is created in Notion' },
+            { name: 'database_property_changed', description: 'Triggered when a specific property of a database item changes' }
+          ],
+          reactions: [
+            { name: 'create_database_item', description: 'Create a new item in a Notion database' },
+            { name: 'update_database_item', description: 'Update an existing item in a Notion database' },
+            { name: 'create_page', description: 'Create a new page in Notion' }
+          ]
         }
       ]
     }
@@ -137,6 +153,7 @@ app.get('/api/v1', (req: Request, res: Response) => {
       spotify: '/api/v1/spotify',
       discord: '/api/v1/services/discord',
       github: '/api/v1/services/github',
+      notion: '/api/v1/notion',
     }
   });
 });
@@ -146,6 +163,7 @@ app.use('/api/v1', spotifyRoutes);
 app.use('/api/v1', areasRoutes);
 app.use('/api/v1/services/discord', discordRoutes);
 app.use('/api/v1/services/github', githubRoutes);
+app.use('/api/v1', notionRoutes);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({
@@ -178,10 +196,14 @@ app.listen(PORT, async () => {
   console.log('🔧 Initializing AREA services...');
   const discordService = new DiscordService();
   await discordService.initialize();
-  
+
   const githubService = new GitHubService();
   await githubService.initialize();
-  
+
+  const notionService = new NotionService();
+  await notionService.initialize();
+  console.log('📝 Notion service initialized');
+
   console.log('✅ All services initialized and ready!');
 });
 
