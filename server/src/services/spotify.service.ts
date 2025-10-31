@@ -12,25 +12,31 @@ export class SpotifyService {
   private static async getUserSpotifyApi(userId: string): Promise<SpotifyWebApi | null> {
     const token = InMemoryDB.getToken(userId, 'spotify');
     if (!token) return null;
-    
+
+    // Vérifier que les champs Spotify requis sont présents
+    if (!token.refreshToken || !token.expiresAt) {
+      console.error('Spotify token missing required fields');
+      return null;
+    }
+
     // Vérifier si le token est expiré
     if (new Date() >= token.expiresAt) {
       const refreshed = await this.refreshToken(userId, token.refreshToken);
       if (!refreshed) return null;
     }
-    
+
     const userApi = new SpotifyWebApi({
       clientId: process.env.SPOTIFY_CLIENT_ID,
       clientSecret: process.env.SPOTIFY_CLIENT_SECRET,
       redirectUri: process.env.SPOTIFY_REDIRECT_URI,
     });
-    
+
     const freshToken = InMemoryDB.getToken(userId, 'spotify');
-    if (!freshToken) return null;
-    
+    if (!freshToken || !freshToken.refreshToken) return null;
+
     userApi.setAccessToken(freshToken.accessToken);
     userApi.setRefreshToken(freshToken.refreshToken);
-    
+
     return userApi;
   }
   
