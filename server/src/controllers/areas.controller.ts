@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { InMemoryDB } from '../models/area.model';
 import { HooksService } from '../services/hooks.service';
+import { TimerService } from '../services/TimerService';
 
 export class AreasController {
   
@@ -113,6 +114,10 @@ export class AreasController {
         reaction,
         enabled: enabled !== false,
       });
+
+      if (area.action.service === 'timer' && area.enabled) {
+        TimerService.scheduleArea(area);
+      }
       
       console.log(`AREA créée: ${area.id} - ${area.name}`);
       res.status(201).json({ area });
@@ -152,6 +157,10 @@ export class AreasController {
     if (!area) {
       return res.status(404).json({ error: 'AREA not found' });
     }
+
+    if (area.action.service === 'timer') {
+      TimerService.updateAreaJob(area);
+    }
     
     console.log(`AREA mise à jour: ${area.id}`);
     res.json({ area });
@@ -176,11 +185,17 @@ export class AreasController {
    */
   static deleteArea(req: Request, res: Response) {
     const { id } = req.params;
-    const deleted = InMemoryDB.deleteArea(id);
+    const area = InMemoryDB.getAreaById(id);
     
-    if (!deleted) {
+    if (!area) {
       return res.status(404).json({ error: 'AREA not found' });
     }
+
+    if (area.action.service === 'timer') {
+      TimerService.cancelAreaJob(id);
+    }
+    
+    const deleted = InMemoryDB.deleteArea(id);
     
     console.log(`AREA supprimée: ${id}`);
     res.json({ success: true });
@@ -212,6 +227,10 @@ export class AreasController {
     }
     
     const updated = InMemoryDB.updateArea(id, { enabled: !area.enabled });
+
+    if (updated && area.action.service === 'timer') {
+      TimerService.updateAreaJob(updated);
+    }
     
     console.log(`AREA ${updated?.enabled ? 'activée' : 'désactivée'}: ${id}`);
     res.json({ area: updated });

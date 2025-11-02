@@ -13,12 +13,14 @@ import spotifyRoutes from './routes/spotify.routes';
 import areasRoutes from './routes/areas.routes';
 import discordRoutes from './routes/discord';
 import githubRoutes from './routes/github';
-import notionRoutes from './routes/notion.routes';
+import googleRoutes from './routes/google';
+import timerRoutes from './routes/timer';
 
 import { HooksService } from './services/hooks.service';
 import { DiscordService } from './services/DiscordService';
 import { GitHubService } from './services/GitHubService';
-import { NotionService } from './services/NotionService';
+import { GmailPollingService } from './services/gmail.polling.service';
+import { TimerService } from './services/TimerService';
 
 import { setupAutoReactions } from './middleware/autoReactions';
 
@@ -124,18 +126,29 @@ app.get('/about.json', (req: Request, res: Response) => {
           ]
         },
         {
-          name: 'notion',
+          name: 'google',
           actions: [
-            { name: 'database_item_created', description: 'Triggered when a new item is added to a Notion database' },
-            { name: 'database_item_updated', description: 'Triggered when an item in a Notion database is updated' },
-            { name: 'page_created', description: 'Triggered when a new page is created in Notion' },
-            { name: 'database_property_changed', description: 'Triggered when a specific property of a database item changes' }
+            { name: 'new_email_received', description: 'Triggered when a new email is received' },
+            { name: 'email_from_sender', description: 'Triggered when an email is received from a specific sender' },
+            { name: 'email_with_subject', description: 'Triggered when an email with specific subject is received' }
           ],
           reactions: [
-            { name: 'create_database_item', description: 'Create a new item in a Notion database' },
-            { name: 'update_database_item', description: 'Update an existing item in a Notion database' },
-            { name: 'create_page', description: 'Create a new page in Notion' }
+            { name: 'send_email', description: 'Send an email via Gmail' },
+            { name: 'reply_to_email', description: 'Reply to an email' },
+            { name: 'add_label', description: 'Add a label to an email' },
+            { name: 'mark_as_read', description: 'Mark an email as read' }
           ]
+        },
+        {
+          name: 'timer',
+          actions: [
+            { name: 'every_hour', description: 'Triggered every hour at minute 0' },
+            { name: 'every_day', description: 'Triggered every day at a specific time' },
+            { name: 'every_week', description: 'Triggered every week on a specific day' },
+            { name: 'interval', description: 'Triggered at regular intervals (in minutes)' },
+            { name: 'scheduled_time', description: 'Triggered based on a custom cron expression' }
+          ],
+          reactions: []
         }
       ]
     }
@@ -153,7 +166,8 @@ app.get('/api/v1', (req: Request, res: Response) => {
       spotify: '/api/v1/spotify',
       discord: '/api/v1/services/discord',
       github: '/api/v1/services/github',
-      notion: '/api/v1/notion',
+      google: '/api/v1/services/google',
+      timer: '/api/v1/services/timer'
     }
   });
 });
@@ -163,7 +177,8 @@ app.use('/api/v1', spotifyRoutes);
 app.use('/api/v1', areasRoutes);
 app.use('/api/v1/services/discord', discordRoutes);
 app.use('/api/v1/services/github', githubRoutes);
-app.use('/api/v1', notionRoutes);
+app.use('/api/v1/services/google', googleRoutes);
+app.use('/api/v1/services/timer', timerRoutes);
 
 app.use((req: Request, res: Response) => {
   res.status(404).json({
@@ -190,6 +205,12 @@ app.listen(PORT, async () => {
   console.log('🎵 Starting Spotify hooks service...');
   HooksService.start();
   
+  console.log('📧 Starting Gmail polling service...');
+  GmailPollingService.start();
+  
+  console.log('⏰ Starting Timer service...');
+  TimerService.start();
+  
   console.log('🤖 Initializing Discord bot (slash commands)...');
   setupAutoReactions();
   
@@ -200,21 +221,21 @@ app.listen(PORT, async () => {
   const githubService = new GitHubService();
   await githubService.initialize();
 
-  const notionService = new NotionService();
-  await notionService.initialize();
-  console.log('📝 Notion service initialized');
-
   console.log('✅ All services initialized and ready!');
 });
 
 process.on('SIGTERM', () => {
   console.log('SIGTERM reçu, arrêt gracieux...');
   HooksService.stop();
+  GmailPollingService.stop();
+  TimerService.stopAll();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   console.log('SIGINT reçu, arrêt gracieux...');
   HooksService.stop();
+  GmailPollingService.stop();
+  TimerService.stopAll();
   process.exit(0);
 });

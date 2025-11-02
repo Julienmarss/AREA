@@ -2,9 +2,123 @@ import { Request, Response } from 'express';
 import { getSpotifyAuthUrl } from '../config/spotify';
 import { InMemoryDB } from '../models/area.model';
 import { SpotifyService } from '../services/spotify.service';
+import { userStorage } from '../storage/UserStorage';
 import axios from 'axios';
 
 export class SpotifyController {
+  
+  // ====== ACTIONS (for testing/debug and manual checks) ======
+  static async actionNewTrackPlayed(req: Request, res: Response) {
+    const userId = (req.query.userId as string) || 'demo_user';
+    const lastTrackId = req.query.lastTrackId as string | undefined;
+    try {
+      const result = await SpotifyService.checkNewTrackPlayed(userId, lastTrackId);
+      return res.json(result);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  static async actionNewTrackSaved(req: Request, res: Response) {
+    const userId = (req.query.userId as string) || 'demo_user';
+    const lastSavedCount = req.query.lastSavedCount ? Number(req.query.lastSavedCount) : undefined;
+    try {
+      const result = await SpotifyService.checkNewTrackSaved(userId, lastSavedCount);
+      return res.json(result);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  static async actionPlaylistUpdated(req: Request, res: Response) {
+    const userId = (req.query.userId as string) || 'demo_user';
+    const playlistId = req.query.playlistId as string;
+    const lastSnapshotId = req.query.lastSnapshotId as string | undefined;
+    if (!playlistId) return res.status(400).json({ error: 'playlistId is required' });
+    try {
+      const result = await SpotifyService.checkPlaylistUpdated(userId, playlistId, lastSnapshotId);
+      return res.json(result);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  static async actionSpecificArtistPlayed(req: Request, res: Response) {
+    const userId = (req.query.userId as string) || 'demo_user';
+    const artistId = req.query.artistId as string;
+    const lastCheckTime = req.query.lastCheckTime ? new Date(String(req.query.lastCheckTime)) : undefined;
+    if (!artistId) return res.status(400).json({ error: 'artistId is required' });
+    try {
+      const result = await SpotifyService.checkSpecificArtistPlayed(userId, artistId, lastCheckTime);
+      return res.json(result);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  static async actionNewArtistFollowed(req: Request, res: Response) {
+    const userId = (req.query.userId as string) || 'demo_user';
+    const lastFollowedArtistIds = req.query.lastFollowedArtistIds
+      ? String(req.query.lastFollowedArtistIds).split(',').map(s => s.trim()).filter(Boolean)
+      : undefined;
+    try {
+      const result = await SpotifyService.checkNewArtistFollowed(userId, lastFollowedArtistIds);
+      return res.json(result);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
+  // ====== REACTIONS (direct execution endpoints) ======
+  static async reactAddTrackToPlaylist(req: Request, res: Response) {
+    const userId = (req.body.userId as string) || 'demo_user';
+    const trackUri = req.body.trackUri as string;
+    const playlistId = req.body.playlistId as string;
+    if (!trackUri || !playlistId) return res.status(400).json({ error: 'trackUri and playlistId are required' });
+    const result = await SpotifyService.addTrackToPlaylist(userId, trackUri, playlistId);
+    return res.status(result.success ? 200 : 400).json(result);
+  }
+
+  static async reactCreatePlaylist(req: Request, res: Response) {
+    const userId = (req.body.userId as string) || 'demo_user';
+    const { name, description, isPublic } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    const result = await SpotifyService.createPlaylist(userId, name, description, Boolean(isPublic));
+    return res.status(result.success ? 200 : 400).json(result);
+  }
+
+  static async reactFollowArtist(req: Request, res: Response) {
+    const userId = (req.body.userId as string) || 'demo_user';
+    const artistId = req.body.artistId as string;
+    if (!artistId) return res.status(400).json({ error: 'artistId is required' });
+    const result = await SpotifyService.followArtist(userId, artistId);
+    return res.status(result.success ? 200 : 400).json(result);
+  }
+
+  static async reactCreatePlaylistWithArtistTopTracks(req: Request, res: Response) {
+    const userId = (req.body.userId as string) || 'demo_user';
+    const artistId = req.body.artistId as string;
+    const playlistName = (req.body.playlistName as string) || undefined;
+    const playlistDescription = (req.body.playlistDescription as string) || undefined;
+    const isPublic = Boolean(req.body.isPublic);
+
+    if (!artistId) return res.status(400).json({ error: 'artistId is required' });
+
+    const topTracks = await SpotifyService.getArtistTopTracks(userId, artistId, 5);
+    if (topTracks.length === 0) return res.status(400).json({ success: false, error: 'No top tracks found' });
+
+    const name = playlistName || `Top 5 - ${artistId}`;
+    const desc = playlistDescription || `Top 5 tracks from ${artistId}`;
+
+    const playlist = await SpotifyService.createPlaylist(userId, name, desc, isPublic);
+    if (!playlist.success || !playlist.playlistId) return res.status(400).json(playlist);
+
+    const uris = topTracks.map(t => t.uri).join(',');
+    const add = await SpotifyService.addTrackToPlaylist(userId, uris, playlist.playlistId);
+    if (!add.success) return res.status(400).json(add);
+
+    return res.json({ success: true, playlistId: playlist.playlistId, tracks: topTracks.length });
+  }
   
   /**
    * @openapi
@@ -99,6 +213,22 @@ export class SpotifyController {
         refreshToken: response.data.refresh_token,
         expiresAt,
       });
+
+      // Fetch Spotify user profile to store display name (like GitHub/Discord)
+      try {
+        const me = await axios.get('https://api.spotify.com/v1/me', {
+          headers: {
+            Authorization: `Bearer ${response.data.access_token}`,
+          },
+        });
+        const displayName = me.data.display_name || me.data.id;
+        userStorage.updateServices(userId, 'spotify', {
+          username: displayName,
+        });
+      } catch (e) {
+        console.warn('Failed to fetch Spotify profile:', (e as any).message);
+        userStorage.updateServices(userId, 'spotify', {});
+      }
       
       console.log(`Token Spotify sauvegardé pour user ${userId}`);
       res.redirect(`${process.env.FRONTEND_URL}/services?connected=spotify`);
@@ -183,6 +313,23 @@ export class SpotifyController {
     res.json({
       connected: !!token,
       expiresAt: token?.expiresAt,
+    });
+  }
+
+  // OAuth-style status to mirror GitHub/Discord endpoints
+  static checkStatusOAuth(req: Request, res: Response) {
+    const userId = req.query.userId as string || 'demo_user';
+    const token = InMemoryDB.getToken(userId, 'spotify');
+    const user = userStorage.findById(userId);
+    const spotifyData = (user as any)?.services?.spotify;
+
+    res.json({
+      authenticated: !!token && spotifyData?.connected !== false,
+      service: 'spotify',
+      username: spotifyData?.username,
+      connectedAt: spotifyData?.connectedAt,
+      // for backward-compatibility if frontend expects it
+      connected: !!token,
     });
   }
   

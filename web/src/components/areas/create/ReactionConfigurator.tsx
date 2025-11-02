@@ -1,6 +1,6 @@
 // web/src/components/areas/create/ReactionConfigurator.tsx
 import { useState, useEffect } from 'react';
-import { MessageSquare, Github, Music, Loader } from 'lucide-react';
+import { MessageSquare, Github, Music, Mail, Loader } from 'lucide-react';
 import DiscordChannelSelector from '../../discord/DiscordChannelSelector';
 import { githubAPI } from '../../../services/api';
 
@@ -232,6 +232,109 @@ export default function ReactionConfigurator({
   }
 
   // ============================================
+  // GOOGLE (GMAIL) REACTION CONFIG
+  // ============================================
+  if (service === 'google') {
+    return (
+      <div className="space-y-4 p-4 bg-gradient-to-br from-red-50 to-orange-50 rounded-lg border border-red-200">
+        <div className="flex items-center space-x-2 mb-2">
+          <Mail className="h-5 w-5 text-red-600" />
+          <h4 className="font-semibold text-gray-900">Gmail REAction Configuration</h4>
+        </div>
+        
+        {/* Send Email */}
+        {type === 'send_email' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                To (Email Address) *
+              </label>
+              <input
+                type="email"
+                value={config.to || ''}
+                onChange={(e) => onConfigChange({ ...config, to: e.target.value })}
+                placeholder="recipient@example.com"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-600"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Subject *
+              </label>
+              <input
+                type="text"
+                value={config.subject || ''}
+                onChange={(e) => onConfigChange({ ...config, subject: e.target.value })}
+                placeholder="Notification from AREA"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-600"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email Body *
+              </label>
+              <textarea
+                value={config.body || ''}
+                onChange={(e) => onConfigChange({ ...config, body: e.target.value })}
+                placeholder="Hello,&#10;&#10;You have a new notification...&#10;&#10;Best regards"
+                rows={5}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-600"
+                required
+              />
+            </div>
+          </>
+        )}
+        
+        {/* Reply to Email */}
+        {type === 'reply_to_email' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Reply Message *
+            </label>
+            <textarea
+              value={config.body || ''}
+              onChange={(e) => onConfigChange({ ...config, body: e.target.value })}
+              placeholder="Thank you for your email. I will get back to you soon."
+              rows={4}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-600"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              💡 This will be sent as a reply to the triggering email
+            </p>
+          </div>
+        )}
+        
+        {/* Add Label / Mark as Read */}
+        {(type === 'add_label' || type === 'mark_as_read') && (
+          <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+            💡 This reaction will be automatically applied to the triggering email.
+          </div>
+        )}
+
+        {/* Placeholders Info */}
+        <PlaceholderInfo actionService={actionService} />
+
+        {/* Preview */}
+        {type === 'send_email' && config.to && (
+          <div className="bg-white border border-red-200 rounded-lg p-4">
+            <p className="text-xs font-semibold text-gray-700 mb-2">📋 Email Preview:</p>
+            <div className="space-y-1 text-xs text-gray-600">
+              <p><strong>To:</strong> {config.to}</p>
+              <p><strong>Subject:</strong> {config.subject || 'No subject'}</p>
+              <p><strong>Body length:</strong> {config.body?.length || 0} characters</p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ============================================
   // DEFAULT: No config needed
   // ============================================
   return (
@@ -276,6 +379,19 @@ function PlaceholderInfo({ actionService }: { actionService: string }) {
             <PlaceholderTag code="{{message.id}}" desc="Message ID" />
             <PlaceholderTag code="{{message.timestamp}}" desc="Timestamp" />
             <PlaceholderTag code="{{message.guild}}" desc="Server name" />
+          </div>
+        </div>
+      )}
+      
+      {actionService === 'google' && (
+        <div>
+          <p className="text-xs font-medium text-gray-600 mb-2">From Gmail:</p>
+          <div className="grid grid-cols-2 gap-2">
+            <PlaceholderTag code="{{email.from}}" desc="Sender email" />
+            <PlaceholderTag code="{{email.to}}" desc="Recipient email" />
+            <PlaceholderTag code="{{email.subject}}" desc="Email subject" />
+            <PlaceholderTag code="{{email.body}}" desc="Email body" />
+            <PlaceholderTag code="{{email.snippet}}" desc="Email preview" />
           </div>
         </div>
       )}

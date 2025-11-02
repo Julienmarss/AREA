@@ -1,6 +1,7 @@
 // web/src/components/areas/create/ActionConfigurator.tsx
-import { MessageSquare, Github, Music } from 'lucide-react';
+import { MessageSquare, Github, Music, Mail } from 'lucide-react';
 import DiscordChannelSelector from '../../discord/DiscordChannelSelector';
+import TimerActionConfig from './TimerActionConfig';
 
 interface ActionConfiguratorProps {
   service: string;
@@ -16,6 +17,13 @@ export default function ActionConfigurator({
   onConfigChange,
 }: ActionConfiguratorProps) {
   
+  // ============================================
+  // TIMER ACTION CONFIG
+  // ============================================
+  if (service === 'timer') {
+    return <TimerActionConfig type={type} config={config} onConfigChange={onConfigChange} />;
+  }
+
   // ============================================
   // DISCORD ACTION CONFIG
   // ============================================
@@ -112,6 +120,78 @@ export default function ActionConfigurator({
         </p>
         <div className="mt-3 p-3 bg-blue-50 rounded-lg text-xs text-blue-800">
           💡 This action will trigger based on your Spotify activity
+        </div>
+      </div>
+    );
+  }
+
+  // ============================================
+  // GOOGLE (GMAIL) ACTION CONFIG
+  // ============================================
+  if (service === 'google') {
+    return (
+      <div className="space-y-4 p-4 bg-gradient-to-br from-red-50 to-orange-50 rounded-lg border border-red-200">
+        <div className="flex items-center space-x-2 mb-2">
+          <Mail className="h-5 w-5 text-red-600" />
+          <h4 className="font-semibold text-gray-900">Gmail Action Configuration</h4>
+        </div>
+        
+        {/* Filtre par expéditeur */}
+        {type === 'email_from_sender' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Sender Email Address *
+            </label>
+            <input
+              type="email"
+              value={config.from || ''}
+              onChange={(e) => onConfigChange({ ...config, from: e.target.value })}
+              placeholder="e.g., boss@company.com"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-600"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              💡 Enter the email address to monitor
+            </p>
+          </div>
+        )}
+        
+        {/* Filtre par sujet */}
+        {type === 'email_with_subject' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Subject Keyword *
+            </label>
+            <input
+              type="text"
+              value={config.subject || ''}
+              onChange={(e) => onConfigChange({ ...config, subject: e.target.value })}
+              placeholder="e.g., Urgent, Invoice, Meeting"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-600"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              💡 Emails containing this keyword in the subject will trigger the action
+            </p>
+          </div>
+        )}
+        
+        {/* Tous les emails */}
+        {type === 'new_email_received' && (
+          <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+            💡 This action will trigger for every new email received in your inbox.
+          </div>
+        )}
+
+        {/* Preview Box */}
+        <div className="bg-white border border-red-200 rounded-lg p-4">
+          <p className="text-xs font-semibold text-gray-700 mb-2">📋 Configuration Preview:</p>
+          <div className="space-y-1 text-xs text-gray-600">
+            <p><strong>Action:</strong> {type.replace(/_/g, ' ')}</p>
+            {config.from && <p><strong>From:</strong> {config.from}</p>}
+            {config.subject && <p><strong>Subject contains:</strong> "{config.subject}"</p>}
+            {type === 'new_email_received' && <p><strong>Trigger:</strong> All emails</p>}
+          </div>
         </div>
       </div>
     );

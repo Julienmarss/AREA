@@ -105,23 +105,56 @@ export const discordAPI = {
   },
 };
 
-// ============= SPOTIFY API =============
-export const spotifyAPI = {
+// ============= GOOGLE API =============
+export const googleAPI = {
   // Vérifier le statut de connexion
-  getStatus: async (userId: string) => {
-    return fetchAPI(`/api/v1/spotify/status?userId=${userId}`);
+  getStatus: async (userId?: string) => {
+    const query = userId ? `?userId=${userId}` : '';
+    return fetchAPI(`/api/v1/services/google/oauth/status${query}`);
   },
 
-  // Initier l'auth OAuth
-  initiateAuth: async (userId: string) => {
-    return fetchAPI(`/api/v1/auth/spotify?userId=${userId}`);
+  // Initier l'OAuth
+  initiateOAuth: async (userId: string) => {
+    return fetchAPI(`/api/v1/services/google/oauth/authorize?userId=${userId}`);
   },
 
   // Déconnecter
   disconnect: async (userId: string) => {
-    return fetchAPI('/api/v1/spotify/disconnect', {
+    return fetchAPI(`/api/v1/services/google/oauth/disconnect?userId=${userId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Récupérer les emails récents
+  getEmails: async (maxResults: number = 10) => {
+    return fetchAPI(`/api/v1/services/google/emails?maxResults=${maxResults}`);
+  },
+
+  // Envoyer un email
+  sendEmail: async (to: string, subject: string, body: string) => {
+    return fetchAPI('/api/v1/services/google/emails/send', {
       method: 'POST',
-      body: JSON.stringify({ userId }),
+      body: JSON.stringify({ to, subject, body }),
+    });
+  },
+};
+
+// ============= SPOTIFY API =============
+export const spotifyAPI = {
+  // Vérifier le statut de connexion
+  getStatus: async (userId: string) => {
+    return fetchAPI(`/api/v1/services/spotify/oauth/status?userId=${userId}`);
+  },
+
+  // Initier l'auth OAuth
+  initiateAuth: async (userId: string) => {
+    return fetchAPI(`/api/v1/services/spotify/oauth/authorize?userId=${userId}`);
+  },
+
+  // Déconnecter
+  disconnect: async (userId: string) => {
+    return fetchAPI(`/api/v1/services/spotify/oauth/disconnect?userId=${userId}`, {
+      method: 'POST',
     });
   },
 
@@ -214,6 +247,32 @@ export const areasAPI = {
     return fetchAPI(`/api/v1/areas/${id}/test`, {
       method: 'POST',
     });
+  },
+};
+
+// ============= TIMER API =============
+export const timerAPI = {
+  // Récupérer les informations du service Timer
+  getInfo: async () => {
+    return fetchAPI('/api/v1/services/timer/info');
+  },
+
+  // Récupérer les jobs planifiés de l'utilisateur
+  getJobs: async () => {
+    return fetchAPI('/api/v1/services/timer/jobs');
+  },
+
+  // Valider une expression cron
+  validateCron: async (cronExpression: string) => {
+    return fetchAPI('/api/v1/services/timer/validate', {
+      method: 'POST',
+      body: JSON.stringify({ cronExpression }),
+    });
+  },
+
+  // Récupérer des exemples d'expressions cron
+  getExamples: async () => {
+    return fetchAPI('/api/v1/services/timer/examples');
   },
 };
 

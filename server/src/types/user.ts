@@ -33,6 +33,14 @@ export interface User {
       }>;
       connectedAt: Date;
     };
+    google?: {
+      connected?: boolean;
+      accessToken?: string;
+      refreshToken?: string;
+      expiresAt?: Date;
+      email?: string;
+      connectedAt?: Date;
+    };
   };
 }
 

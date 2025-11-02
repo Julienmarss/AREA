@@ -1,12 +1,13 @@
 // web/src/pages/Services.tsx
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { githubAPI, discordAPI, spotifyAPI, notionAPI } from '../services/api';
+import { githubAPI, discordAPI, spotifyAPI, googleAPI, timerAPI } from '../services/api';
 import { ServiceStatus } from '../types/services';
 import GitHubConnect from '../components/services/GitHubConnect';
 import DiscordConnect from '../components/services/DiscordConnect';
 import SpotifyConnect from '../components/services/SpotifyConnect';
-import NotionConnect from '../components/services/NotionConnect';
+import GoogleConnect from '../components/services/GoogleConnect';
+import TimerConnect from '../components/services/TimerConnect';
 import { AlertCircle, Info } from 'lucide-react';
 
 export default function Services() {
@@ -27,10 +28,14 @@ export default function Services() {
     loading: true
   });
 
-  const [notionStatus, setNotionStatus] = useState<ServiceStatus>({
+  const [googleStatus, setGoogleStatus] = useState<ServiceStatus>({
     connected: false,
     loading: true
   });
+
+  const [timerJobsCount, setTimerJobsCount] = useState<number>(0);
+  const [timerLoading, setTimerLoading] = useState<boolean>(true);
+  const [timerError, setTimerError] = useState<string | undefined>(undefined);
 
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -69,7 +74,7 @@ export default function Services() {
       });
     }
 
-    // Load Discord status (avec userId)
+    // Load Discord status
     try {
       console.log('🔍 Loading Discord status...');
       const discordRes = await discordAPI.getStatus(userId);
@@ -96,9 +101,12 @@ export default function Services() {
       console.log('🔍 Loading Spotify status...');
       const spotifyRes = await spotifyAPI.getStatus(userId);
       console.log('✅ Spotify status:', spotifyRes);
-
+      
+      const isConnected = (spotifyRes.authenticated !== undefined)
+        ? spotifyRes.authenticated
+        : spotifyRes.connected;
       setSpotifyStatus({
-        connected: spotifyRes.connected,
+        connected: isConnected,
         loading: false,
       });
     } catch (error: any) {
@@ -110,24 +118,39 @@ export default function Services() {
       });
     }
 
-    // Load Notion status
+    // Load Google status
     try {
-      console.log('🔍 Loading Notion status...');
-      const notionRes = await notionAPI.getStatus(userId);
-      console.log('✅ Notion status:', notionRes);
-
-      setNotionStatus({
-        connected: notionRes.authenticated || notionRes.connected,
+      console.log('🔍 Loading Google status...');
+      const googleRes = await googleAPI.getStatus(userId);
+      console.log('✅ Google status:', googleRes);
+      
+      setGoogleStatus({
+        connected: googleRes.authenticated,
         loading: false,
-        username: notionRes.workspace_name,
+        username: googleRes.email,
       });
     } catch (error: any) {
-      console.error('❌ Failed to load Notion status:', error);
-      setNotionStatus({
-        connected: false,
+      console.error('❌ Failed to load Google status:', error);
+      setGoogleStatus({ 
+        connected: false, 
         loading: false,
-        error: error.message || 'Failed to load Notion status'
+        error: error.message || 'Failed to load Google status'
       });
+    }
+
+    // Load Timer jobs count
+    try {
+      console.log('⏰ Loading Timer jobs...');
+      const timerRes = await timerAPI.getJobs();
+      console.log('✅ Timer jobs:', timerRes);
+      setTimerJobsCount(timerRes.count || 0);
+      setTimerLoading(false);
+      setTimerError(undefined);
+    } catch (error: any) {
+      console.error('❌ Failed to load Timer jobs:', error);
+      setTimerJobsCount(0);
+      setTimerLoading(false);
+      setTimerError(undefined);
     }
   };
 
@@ -209,25 +232,25 @@ export default function Services() {
     }
   };
 
-  const handleConnectNotion = async () => {
+  const handleConnectGoogle = async () => {
     if (!user?.id) {
-      setNotionStatus(prev => ({
+      setGoogleStatus(prev => ({
         ...prev,
         error: 'User not authenticated',
       }));
       return;
     }
 
-    setNotionStatus(prev => ({ ...prev, loading: true, error: undefined }));
-
+    setGoogleStatus(prev => ({ ...prev, loading: true, error: undefined }));
+    
     try {
-      console.log('🔗 Initiating Notion OAuth for user:', user.id);
-      const response = await notionAPI.initiateOAuth(user.id);
+      console.log('🔗 Initiating Google OAuth for user:', user.id);
+      const response = await googleAPI.initiateOAuth(user.id);
       console.log('✅ Redirecting to:', response.authUrl);
       window.location.href = response.authUrl;
     } catch (error: any) {
-      console.error('❌ Notion OAuth failed:', error);
-      setNotionStatus(prev => ({
+      console.error('❌ Google OAuth failed:', error);
+      setGoogleStatus(prev => ({
         ...prev,
         loading: false,
         error: error.message || 'Failed to initiate OAuth',
@@ -268,10 +291,11 @@ export default function Services() {
       </div>
 
       <div className="space-y-6">
+        <TimerConnect jobsCount={timerJobsCount} loading={timerLoading} error={timerError} />
         <GitHubConnect status={githubStatus} onConnect={handleConnectGitHub} />
         <DiscordConnect status={discordStatus} onConnect={handleConnectDiscord} />
         <SpotifyConnect status={spotifyStatus} onConnect={handleConnectSpotify} />
-        <NotionConnect status={notionStatus} onConnect={handleConnectNotion} />
+        <GoogleConnect status={googleStatus} onConnect={handleConnectGoogle} />
       </div>
 
       {/* Help Section */}
@@ -280,7 +304,22 @@ export default function Services() {
           Need help connecting services?
         </h3>
         
-        <div className="grid md:grid-cols-4 gap-6">
+        <div className="grid md:grid-cols-5 gap-4">
+          <div>
+            <h4 className="font-medium text-gray-900 mb-2 flex items-center">
+              <span className="bg-purple-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs mr-2">
+                TM
+              </span>
+              Timer
+            </h4>
+            <ul className="space-y-1 text-sm text-gray-700">
+              <li>• No setup required!</li>
+              <li>• Schedule by time/day/week</li>
+              <li>• Set custom intervals</li>
+              <li>• Trigger any reaction</li>
+            </ul>
+          </div>
+
           <div>
             <h4 className="font-medium text-gray-900 mb-2 flex items-center">
               <span className="bg-gray-900 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs mr-2">
@@ -328,16 +367,16 @@ export default function Services() {
 
           <div>
             <h4 className="font-medium text-gray-900 mb-2 flex items-center">
-              <span className="bg-gray-800 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs mr-2">
-                NT
+              <span className="bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs mr-2">
+                GM
               </span>
-              Notion
+              Google (Gmail)
             </h4>
             <ul className="space-y-1 text-sm text-gray-700">
-              <li>• Click "Connect with Notion"</li>
-              <li>• Select your workspace</li>
-              <li>• Authorize access to pages</li>
-              <li>• Automate databases and content</li>
+              <li>• Click "Connect with Google"</li>
+              <li>• Authorize Gmail access</li>
+              <li>• Auto-reply to emails</li>
+              <li>• Manage labels & filters</li>
             </ul>
           </div>
         </div>

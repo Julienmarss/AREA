@@ -108,6 +108,8 @@ export class SpotifyService {
             trackId: latestTrack.id,
             trackName: latestTrack.name,
             artistName: latestTrack.artists[0].name,
+            artistId: latestTrack.artists[0].id,
+            artists: latestTrack.artists.map(a => ({ id: a.id, name: a.name })),
             albumName: latestTrack.album.name,
             uri: latestTrack.uri,
           },
@@ -145,6 +147,8 @@ export class SpotifyService {
             trackId: newTrack.id,
             trackName: newTrack.name,
             artistName: newTrack.artists[0].name,
+            artistId: newTrack.artists[0].id,
+            artists: newTrack.artists.map(a => ({ id: a.id, name: a.name })),
             savedCount: currentCount,
             uri: newTrack.uri,
           },
@@ -297,9 +301,27 @@ export class SpotifyService {
     const api = await this.getUserSpotifyApi(userId);
     if (!api) return { success: false, error: 'User not authenticated' };
 
+    const normalizePlaylistId = (value: string): string => {
+      let v = value.trim();
+      // Strip URL query
+      if (v.includes('?')) v = v.split('?')[0];
+      // Handle full URLs
+      const urlMatch = v.match(/playlist\/([a-zA-Z0-9]+)/);
+      if (urlMatch) return urlMatch[1];
+      // Handle spotify:playlist:ID
+      if (v.startsWith('spotify:playlist:')) return v.split(':').pop() as string;
+      // If it's a full URI like spotify:playlist:ID?si=...
+      if (v.includes(':')) {
+        const parts = v.split(':');
+        return parts[parts.length - 1];
+      }
+      return v;
+    };
+
     try {
       const uris = trackUri.includes(',') ? trackUri.split(',') : [trackUri];
-      await api.addTracksToPlaylist(playlistId, uris);
+      const normalizedId = normalizePlaylistId(playlistId);
+      await api.addTracksToPlaylist(normalizedId, uris);
       return { success: true };
     } catch (error: any) {
       console.error('Erreur addTrackToPlaylist:', error);

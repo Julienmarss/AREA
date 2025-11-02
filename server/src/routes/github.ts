@@ -7,6 +7,7 @@ import { userStorage } from '../storage/UserStorage';
 import { AreaExecutor } from '../services/AreaExecutor';
 import crypto from 'crypto';
 import { GitHubController } from '../controllers/github.controller';
+import { Octokit } from '@octokit/rest';
 
 const router = Router();
 const githubService = new GitHubService();
@@ -522,7 +523,6 @@ router.get('/repositories', authenticate, async (req: AuthRequest, res: Response
       return res.status(401).json({ error: 'GitHub not authenticated' });
     }
     
-    const { Octokit } = require('@octokit/rest');
     const octokit = new Octokit({
       auth: githubData.accessToken
     });

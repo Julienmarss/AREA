@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { areasAPI, aboutAPI, githubAPI, discordAPI, spotifyAPI } from '../../services/api';
+import { areasAPI, aboutAPI, githubAPI, discordAPI, spotifyAPI, googleAPI } from '../../services/api';
 import { CheckCircle, AlertCircle, Loader } from 'lucide-react';
 import CreateAreaSteps from '../../components/areas/create/CreateAreaSteps';
 import { isActionConfigValid, isReactionConfigValid } from '../../components/areas/create/utils';
@@ -30,6 +30,7 @@ export default function CreateArea() {
   const [githubConnected, setGithubConnected] = useState(false);
   const [discordConnected, setDiscordConnected] = useState(false);
   const [spotifyConnected, setSpotifyConnected] = useState(false);
+  const [googleConnected, setGoogleConnected] = useState(false);
 
   // Wizard state
   const [currentStep, setCurrentStep] = useState(1);
@@ -90,6 +91,13 @@ export default function CreateArea() {
         console.error('Failed to check Spotify:', e);
       }
 
+      try {
+        const google = await googleAPI.getStatus(userId);
+        setGoogleConnected(google.authenticated);
+      } catch (e) {
+        console.error('Failed to check Google:', e);
+      }
+
     } catch (error) {
       console.error('Failed to load data:', error);
       setError('Failed to load services');
@@ -106,6 +114,8 @@ export default function CreateArea() {
       case 'github': return githubConnected;
       case 'discord': return discordConnected;
       case 'spotify': return spotifyConnected;
+      case 'google': return googleConnected;
+      case 'timer': return true; // Timer is always available
       default: return false;
     }
   };

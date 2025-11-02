@@ -1,3 +1,19 @@
+// Mock GitHubService before any imports to avoid Octokit ESM issues
+jest.mock('../services/GitHubService', () => ({
+  GitHubService: jest.fn().mockImplementation(() => ({
+    getConfig: jest.fn().mockReturnValue({
+      name: 'github',
+      displayName: 'GitHub',
+      authType: 'oauth2',
+      baseUrl: 'https://api.github.com'
+    }),
+    getActions: jest.fn().mockReturnValue([]),
+    getReactions: jest.fn().mockReturnValue([]),
+    authenticate: jest.fn().mockResolvedValue(true),
+    isAuthenticated: jest.fn().mockResolvedValue(false)
+  }))
+}));
+
 import request from 'supertest';
 import express from 'express';
 import { InMemoryDB } from '../models/area.model';

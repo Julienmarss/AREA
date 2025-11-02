@@ -21,6 +21,9 @@ const router = Router();
  */
 router.get('/auth/spotify', SpotifyController.initiateAuth);
 
+// Mirror GitHub/Discord style endpoints under /services/spotify/oauth
+router.get('/services/spotify/oauth/authorize', SpotifyController.initiateAuth);
+
 /**
  * @openapi
  * /auth/spotify/callback:
@@ -47,6 +50,8 @@ router.get('/auth/spotify', SpotifyController.initiateAuth);
  *         description: Redirection vers le front
  */
 router.get('/auth/spotify/callback', SpotifyController.callback);
+
+router.get('/services/spotify/oauth/callback', SpotifyController.callback);
 
 /**
  * @openapi
@@ -105,6 +110,8 @@ router.get('/spotify/search/artists', SpotifyController.searchArtists);
  */
 router.get('/spotify/status', SpotifyController.checkStatus);
 
+router.get('/services/spotify/oauth/status', SpotifyController.checkStatusOAuth);
+
 /**
  * @openapi
  * /spotify/disconnect:
@@ -123,5 +130,24 @@ router.get('/spotify/status', SpotifyController.checkStatus);
  *         description: Succès de la déconnexion
  */
 router.post('/spotify/disconnect', SpotifyController.disconnect);
+
+router.post('/services/spotify/oauth/disconnect', SpotifyController.disconnect);
+
+/**
+ * Debug/test endpoints for Spotify Actions
+ */
+router.get('/spotify/actions/new-track-played', SpotifyController.actionNewTrackPlayed);
+router.get('/spotify/actions/new-track-saved', SpotifyController.actionNewTrackSaved);
+router.get('/spotify/actions/playlist-updated', SpotifyController.actionPlaylistUpdated);
+router.get('/spotify/actions/specific-artist-played', SpotifyController.actionSpecificArtistPlayed);
+router.get('/spotify/actions/new-artist-followed', SpotifyController.actionNewArtistFollowed);
+
+/**
+ * Direct execution endpoints for Spotify Reactions
+ */
+router.post('/spotify/reactions/add-track-to-playlist', SpotifyController.reactAddTrackToPlaylist);
+router.post('/spotify/reactions/create-playlist', SpotifyController.reactCreatePlaylist);
+router.post('/spotify/reactions/follow-artist', SpotifyController.reactFollowArtist);
+router.post('/spotify/reactions/create-playlist-with-artist-top-tracks', SpotifyController.reactCreatePlaylistWithArtistTopTracks);
 
 export default router;

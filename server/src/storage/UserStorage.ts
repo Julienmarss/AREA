@@ -24,7 +24,8 @@ class UserStorage {
     return updatedUser;
   }
 
-  updateServices(id: string, service: 'github' | 'discord', data: any): User | undefined {
+  updateServices(id: string, service: 'github' | 'discord' | 'spotify' | 'google', data: any): User | undefined {
+
     const user = this.users.get(id);
     if (!user) return undefined;
 

@@ -89,7 +89,7 @@ describe('Service Configurations', () => {
       expect(config).toBeDefined();
       expect(config.name).toBe('discord');
       expect(config.displayName).toBe('Discord');
-      expect(config.authType).toBe('bot_token');
+      expect(config.authType).toBe('oauth2');
     });
 
     test('should have valid actions', () => {

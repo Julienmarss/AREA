@@ -76,7 +76,8 @@ export default function DiscordGuildsManager() {
     return <Hash className="h-4 w-4 text-gray-500" />;
   };
 
-  const copyChannelId = (channelId: string, _channelName: string) => {
+
+  const copyChannelId = (channelId: string) => {
     navigator.clipboard.writeText(channelId);
     alert(`Channel ID copied: ${channelId}\nYou can use this ID when creating AREAs`);
   };
@@ -173,7 +174,7 @@ export default function DiscordGuildsManager() {
                     .map((channel) => (
                       <button
                         key={channel.id}
-                        onClick={() => copyChannelId(channel.id, channel.name)}
+                        onClick={() => copyChannelId(channel.id)}
                         className="w-full flex items-center space-x-2 px-3 py-2 bg-white rounded hover:bg-indigo-50 transition text-left group"
                       >
                         {getChannelTypeIcon(channel.type)}

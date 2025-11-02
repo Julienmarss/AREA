@@ -2,16 +2,13 @@ import { AREA, InMemoryDB } from '../models/area.model';
 import { GitHubService } from './GitHubService';
 import { DiscordService } from './DiscordService';
 import { SpotifyService } from './spotify.service';
-import { NotionService } from './NotionService';
+import { GoogleService } from './GoogleService';
 import { userStorage } from '../storage/UserStorage';
 
 /**
  * Service central pour exécuter les REActions des AREAs
  */
 export class AreaExecutor {
-  // Supprimer les instances statiques partagées
-  // private static githubService = new GitHubService();
-  // private static discordService = new DiscordService();
 
   /**
    * Trouve et exécute toutes les AREAs correspondant à un événement
@@ -85,8 +82,24 @@ export class AreaExecutor {
     }
 
     if (area.action.service === 'spotify') {
-      if (config.artistId && triggerData.artistId !== config.artistId) {
-        return false;
+      if (config.artistId) {
+        const triggerArtistIds: string[] = [
+          ...(triggerData.artists?.map((a: any) => a.id) || []),
+          ...(triggerData.artistId ? [triggerData.artistId] : [])
+        ];
+        if (!triggerArtistIds.includes(config.artistId)) {
+          return false;
+        }
+      }
+
+      if (config.artistName) {
+        const triggerArtistNames: string[] = [
+          ...(triggerData.artists?.map((a: any) => a.name?.toLowerCase()) || []),
+          ...(triggerData.artistName ? [String(triggerData.artistName).toLowerCase()] : [])
+        ];
+        if (!triggerArtistNames.includes(String(config.artistName).toLowerCase())) {
+          return false;
+        }
       }
 
       if (config.playlistId && triggerData.playlistId !== config.playlistId) {
@@ -94,19 +107,6 @@ export class AreaExecutor {
       }
     }
 
-    if (area.action.service === 'notion') {
-      if (config.databaseId && triggerData.databaseId !== config.databaseId) {
-        return false;
-      }
-
-      if (config.parentPageId && triggerData.parentPageId !== config.parentPageId) {
-        return false;
-      }
-
-      if (config.propertyName && triggerData.propertyName !== config.propertyName) {
-        return false;
-      }
-    }
 
     return true;
   }
@@ -119,7 +119,7 @@ export class AreaExecutor {
     const enrichedConfig = this.enrichConfig(config, triggerData);
 
     switch (service) {
-      case 'github':
+      case 'github': 
         await this.executeGitHubReaction(area.userId, type, enrichedConfig, triggerData);
         break;
 
@@ -131,8 +131,8 @@ export class AreaExecutor {
         await this.executeSpotifyReaction(area.userId, type, enrichedConfig, triggerData);
         break;
 
-      case 'notion':
-        await this.executeNotionReaction(area.userId, type, enrichedConfig, triggerData);
+      case 'google':
+        await this.executeGoogleReaction(area.userId, type, enrichedConfig, triggerData);
         break;
 
       default:
@@ -190,11 +190,12 @@ export class AreaExecutor {
       result = result.replace(/\{\{track\.name\}\}/g, triggerData.trackName || '');
       result = result.replace(/\{\{track\.artist\}\}/g, triggerData.artistName || '');
     }
-
-    if (triggerData.pageId) {
-      result = result.replace(/\{\{notion\.pageId\}\}/g, triggerData.pageId || '');
-      result = result.replace(/\{\{notion\.url\}\}/g, triggerData.url || '');
-      result = result.replace(/\{\{notion\.databaseId\}\}/g, triggerData.databaseId || '');
+    if (triggerData.email) {
+      result = result.replace(/\{\{email\.from\}\}/g, triggerData.email.from || '');
+      result = result.replace(/\{\{email\.to\}\}/g, triggerData.email.to || '');
+      result = result.replace(/\{\{email\.subject\}\}/g, triggerData.email.subject || '');
+      result = result.replace(/\{\{email\.body\}\}/g, triggerData.email.body || '');
+      result = result.replace(/\{\{email\.snippet\}\}/g, triggerData.email.snippet || '');
     }
 
     return result;
@@ -253,16 +254,15 @@ export class AreaExecutor {
     const user = userStorage.findById(userId);
     const discordData = user?.services?.discord;
     
-    if (!discordData?.botToken || !discordData?.guildId) {
+    if (!discordData?.guildId) {
       console.error(`❌ No Discord credentials found for user ${userId}`);
       throw new Error('Discord not authenticated for this user');
     }
     
-    console.log(`✅ Found Discord credentials for user ${userId}`);
+    console.log(`✅ Found Discord credentials for user ${userId} (guild: ${discordData.guildId})`);
     
-    // Authentifier le service
+    // Authentifier le service (Discord utilise un bot global)
     const authenticated = await discordService.authenticate(userId, {
-      botToken: discordData.botToken,
       guildId: discordData.guildId
     });
     
@@ -300,11 +300,19 @@ export class AreaExecutor {
       }
 
       case 'create_playlist': {
+        // Ensure a valid name
+        const fallbackName = triggerData.trackName
+          ? `AREA - ${triggerData.trackName}`
+          : (triggerData.artistName ? `AREA - ${triggerData.artistName}` : `AREA Playlist`);
+        const name = (config.name && String(config.name).trim()) || fallbackName;
+        const description = config.description || '';
+        const isPublic = Boolean(config.isPublic);
+
         const result = await SpotifyService.createPlaylist(
           userId,
-          config.name,
-          config.description,
-          config.isPublic
+          name,
+          description,
+          isPublic
         );
         if (result.success) {
           console.log(`✅ Playlist created: ${result.playlistId}`);
@@ -315,7 +323,15 @@ export class AreaExecutor {
       }
 
       case 'follow_artist': {
-        const artistId = triggerData.artistId || config.artistId;
+        if (!config.artistId && !config.artistName && Array.isArray(triggerData.artists) && triggerData.artists.length > 1) {
+          console.error('Ambiguous artist for follow_artist. Provide reaction.config.artistId or artistName.');
+          return;
+        }
+        const artistId =
+          config.artistId ||
+          (config.artistName && triggerData.artists?.find((a: any) => a.name?.toLowerCase() === String(config.artistName).toLowerCase())?.id) ||
+          triggerData.artistId ||
+          triggerData.artists?.[0]?.id;
         if (!artistId) {
           console.error('No artist ID for follow_artist');
           return;
@@ -330,8 +346,34 @@ export class AreaExecutor {
       }
 
       case 'create_playlist_with_artist_top_tracks': {
-        const artistId = triggerData.artistId || config.artistId;
-        const artistName = triggerData.artistName || config.artistName || 'Artist';
+        if (!config.artistId && !config.artistName && Array.isArray(triggerData.artists) && triggerData.artists.length > 1) {
+          console.error('Ambiguous artist for create_playlist_with_artist_top_tracks. Provide reaction.config.artistId or artistName.');
+          return;
+        }
+        const resolvedArtist = (() => {
+          // 1) explicit id in config
+          if (config.artistId) {
+            const matchById = triggerData.artists?.find((a: any) => a.id === config.artistId);
+            return { id: config.artistId, name: matchById?.name || config.artistName };
+          }
+          // 2) explicit name in config
+          if (config.artistName && triggerData.artists?.length) {
+            const m = triggerData.artists.find((a: any) => a.name?.toLowerCase() === String(config.artistName).toLowerCase());
+            if (m) return { id: m.id, name: m.name };
+          }
+          // 3) fallback to triggerData primary
+          if (triggerData.artistId || triggerData.artistName) {
+            return { id: triggerData.artistId, name: triggerData.artistName };
+          }
+          // 4) fallback to first artist in list
+          if (triggerData.artists?.length) {
+            return { id: triggerData.artists[0].id, name: triggerData.artists[0].name };
+          }
+          return { id: undefined, name: undefined };
+        })();
+
+        const artistId = resolvedArtist.id;
+        const artistName = resolvedArtist.name || 'Artist';
 
         if (!artistId) {
           console.error('No artist ID for create_playlist_with_artist_top_tracks');
@@ -344,8 +386,8 @@ export class AreaExecutor {
           return;
         }
 
-        const playlistName = config.playlistName || `Top 5 - ${artistName}`;
-        const playlistDesc = config.playlistDescription || `Top 5 tracks from ${artistName}`;
+        const playlistName = (config.playlistName && String(config.playlistName).trim()) || `Top 5 - ${artistName}`;
+        const playlistDesc = (config.playlistDescription && String(config.playlistDescription).trim()) || `Top 5 tracks from ${artistName}`;
 
         const playlistResult = await SpotifyService.createPlaylist(
           userId,
@@ -376,45 +418,44 @@ export class AreaExecutor {
     }
   }
 
-  private static async executeNotionReaction(
-    userId: string,
-    reactionType: string,
-    config: any,
-    triggerData: any
-  ): Promise<void> {
-    console.log(`🔧 Executing Notion reaction for user: ${userId}`);
-
-    // Créer une instance dédiée
-    const notionService = new NotionService();
-
-    // Récupérer les données Notion depuis InMemoryDB
-    const token = InMemoryDB.getToken(userId, 'notion');
-
-    if (!token?.accessToken) {
-      console.error(`❌ No Notion token found for user ${userId}`);
-      throw new Error('Notion not authenticated for this user');
-    }
-
-    console.log(`✅ Found Notion token for user ${userId}`);
-
-    // Authentifier le service avec le token
-    const authenticated = await notionService.authenticate(userId, {
-      access_token: token.accessToken,
-      bot_id: token.metadata?.bot_id || '',
-      workspace_id: token.metadata?.workspace_id || '',
-      workspace_name: token.metadata?.workspace_name || '',
-      workspace_icon: token.metadata?.workspace_icon || '',
-      owner: { type: 'user' }
-    });
-
-    if (!authenticated) {
-      console.error(`❌ Failed to authenticate Notion service for user ${userId}`);
-      throw new Error('Notion authentication failed');
-    }
-
-    console.log(`✅ Notion service authenticated for user ${userId}`);
-
-    // Exécuter la réaction
-    await notionService.executeReaction(reactionType, userId, config, triggerData);
+private static async executeGoogleReaction(
+  userId: string,
+  reactionType: string,
+  config: any,
+  triggerData: any
+): Promise<void> {
+  console.log(`🔧 Executing Google reaction for user: ${userId}`);
+  
+  // Créer une instance dédiée
+  const googleService = new GoogleService();
+  
+  // Récupérer les données Google depuis userStorage
+  const user = userStorage.findById(userId);
+  const googleData = user?.services?.google;
+  
+  if (!googleData?.accessToken) {
+    console.error(`❌ No Google credentials found for user ${userId}`);
+    throw new Error('Google not authenticated for this user');
   }
+  
+  console.log(`✅ Found Google credentials for user ${userId}`);
+  
+  // Authentifier le service
+  const authenticated = await googleService.authenticate(userId, {
+    accessToken: googleData.accessToken,
+    refreshToken: googleData.refreshToken,
+    expiresAt: googleData.expiresAt,
+  });
+  
+  if (!authenticated) {
+    console.error(`❌ Failed to authenticate Google service for user ${userId}`);
+    throw new Error('Google authentication failed');
+  }
+  
+  console.log(`✅ Google service authenticated for user ${userId}`);
+  
+  // Exécuter la réaction
+  await googleService.executeReaction(reactionType, userId, config, triggerData);
+}
+
 }

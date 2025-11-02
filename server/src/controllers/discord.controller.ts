@@ -85,7 +85,7 @@ static async callback(req: Request, res: Response) {
     
     await client.guilds.fetch();
     
-    let guild = client.guilds.cache.get(selectedGuildId);
+    const guild = client.guilds.cache.get(selectedGuildId);
     
     if (!guild) {
       console.error('❌ Bot not in guild:', selectedGuildId);
