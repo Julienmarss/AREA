@@ -33,7 +33,7 @@ export class HooksService {
   }
   
   private static async checkAllAreas() {
-    const areas = InMemoryDB.getAreas();
+    const areas = await InMemoryDB.getAreas();
     const activeAreas = areas.filter(area => area.enabled && area.action.service === 'spotify');
     
     if (activeAreas.length === 0) return;
@@ -113,7 +113,7 @@ export class HooksService {
     }
     
     if (result.triggered) {
-      console.log(`🎵 Spotify Action déclenchée: ${area.name} (${type})`);
+      console.log(`Spotify Action déclenchée: ${area.name} (${type})`);
       
       await AreaExecutor.executeMatchingAreas('spotify', type, result.data);
       
@@ -129,7 +129,7 @@ export class HooksService {
   }
 
   static async forceCheckArea(areaId: string): Promise<boolean> {
-    const area = InMemoryDB.getAreaById(areaId);
+    const area = await InMemoryDB.getAreaById(areaId);
     if (!area) return false;
     
     if (area.action.service === 'spotify') {

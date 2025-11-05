@@ -48,12 +48,21 @@ export function isActionConfigValid(
   type: string,
   config: Record<string, any>
 ): boolean {
-  if (service === 'discord' && type === 'message_posted_in_channel') {
-    return !!(config.channelId && config.guildId);
+  if (service === 'discord') {
+    if (type === 'message_posted_in_channel') {
+      return !!(config.channelId && config.guildId);
+    }
+    if (type === 'user_mentioned') {
+      return !!config.userId;
+    }
+    if (type === 'user_joined_server') {
+      return !!config.guildId;
+    }
   }
   
   if (service === 'github') {
-    return true; // GitHub actions are usually valid by default
+    // GitHub actions need owner and repo
+    return !!(config.owner && config.repo);
   }
   
   if (service === 'google') {
@@ -94,20 +103,42 @@ export function isReactionConfigValid(
   type: string,
   config: Record<string, any>
 ): boolean {
-  if (service === 'github' && type === 'create_issue') {
-    return !!(config.owner && config.repo && config.title);
+  if (service === 'github') {
+    if (type === 'create_issue') {
+      return !!(config.owner && config.repo && config.title);
+    }
+    if (type === 'comment_on_issue') {
+      return !!(config.owner && config.repo && config.issue_number && config.body);
+    }
+    if (type === 'create_repository') {
+      return !!config.name;
+    }
   }
   
-  if (service === 'discord' && type === 'send_message_to_channel') {
-    return !!(config.channelId && config.content);
+  if (service === 'discord') {
+    if (type === 'send_message_to_channel') {
+      return !!(config.channelId && config.content);
+    }
+    if (type === 'send_dm') {
+      return !!(config.userId && config.content);
+    }
+    if (type === 'add_role_to_user') {
+      return !!(config.guildId && config.userId && config.roleId);
+    }
   }
   
   if (service === 'google' && type === 'send_email') {
     return !!(config.to && config.subject && config.body);
   }
   
-  if (service === 'google' && type === 'reply_to_email') {
-    return !!config.body;
+  if (service === 'google') {
+    if (type === 'reply_to_email') {
+      return !!config.body;
+    }
+    if (type === 'add_label') {
+      return !!config.labelName;
+    }
+    // mark_as_read doesn't need config
   }
   
   return true;

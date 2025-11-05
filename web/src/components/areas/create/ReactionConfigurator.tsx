@@ -33,7 +33,7 @@ export default function ReactionConfigurator({
 
   // Load GitHub repos if needed
   useEffect(() => {
-    if (service === 'github' && type === 'create_issue' && githubRepos.length === 0) {
+    if (service === 'github' && (type === 'create_issue' || type === 'comment_on_issue') && githubRepos.length === 0) {
       loadGitHubRepositories();
     }
   }, [service, type]);
@@ -54,7 +54,9 @@ export default function ReactionConfigurator({
   // ============================================
   // DISCORD REACTION CONFIG
   // ============================================
-  if (service === 'discord' && type === 'send_message_to_channel') {
+  if (service === 'discord') {
+    // send_message_to_channel
+    if (type === 'send_message_to_channel') {
     return (
       <div className="space-y-4 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
         <div className="flex items-center space-x-2 mb-2">
@@ -98,12 +100,161 @@ export default function ReactionConfigurator({
         <DiscordPreview config={config} />
       </div>
     );
+    }
+    
+    // send_dm
+    if (type === 'send_dm') {
+      return (
+        <div className="space-y-4 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
+          <div className="flex items-center space-x-2 mb-2">
+            <MessageSquare className="h-5 w-5 text-indigo-600" />
+            <h4 className="font-semibold text-gray-900">Discord DM Configuration</h4>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              User ID *
+            </label>
+            <input
+              type="text"
+              value={config.userId || ''}
+              onChange={(e) => onConfigChange({ ...config, userId: e.target.value })}
+              placeholder="123456789012345678"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              💡 Discord User ID to send the DM to. Right-click on a user and "Copy User ID"
+            </p>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Message Content *
+            </label>
+            <textarea
+              value={config.content || ''}
+              onChange={(e) => onConfigChange({ ...config, content: e.target.value })}
+              placeholder="Hello! 👋&#10;&#10;You have a new notification from AREA.&#10;&#10;Details: {{issue.title}}"
+              rows={5}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg font-mono text-sm focus:ring-2 focus:ring-indigo-600"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              💡 Use placeholders like {`{{issue.title}}`} for dynamic content
+            </p>
+          </div>
+
+          {/* Placeholders Info */}
+          <PlaceholderInfo actionService={actionService} />
+
+          {/* Preview */}
+          <div className="bg-white border border-indigo-200 rounded-lg p-4">
+            <p className="text-xs font-semibold text-gray-700 mb-2">📋 Configuration Preview:</p>
+            <div className="space-y-1 text-xs text-gray-600">
+              <p><strong>Target User ID:</strong> {config.userId || 'Not configured'}</p>
+              {config.content && (
+                <p><strong>Message Length:</strong> {config.content.length} characters</p>
+              )}
+            </div>
+            
+            {config.content && (
+              <div className="mt-3 p-3 bg-gray-800 text-gray-100 rounded border-l-4 border-indigo-600 font-mono">
+                <p className="text-xs font-medium text-gray-300 mb-2">💬 DM Preview:</p>
+                <pre className="text-xs whitespace-pre-wrap">
+                  {config.content}
+                </pre>
+              </div>
+            )}
+            
+            <div className="mt-3 p-2 bg-blue-50 rounded text-xs text-blue-800">
+              💡 This DM will be sent to user <strong>{config.userId || '[User ID]'}</strong> when the Action is triggered.
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    // add_role_to_user
+    if (type === 'add_role_to_user') {
+      return (
+        <div className="space-y-4 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
+          <div className="flex items-center space-x-2 mb-2">
+            <MessageSquare className="h-5 w-5 text-indigo-600" />
+            <h4 className="font-semibold text-gray-900">Discord Add Role Configuration</h4>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Server (Guild) ID *
+            </label>
+            <input
+              type="text"
+              value={config.guildId || ''}
+              onChange={(e) => onConfigChange({ ...config, guildId: e.target.value })}
+              placeholder="123456789012345678"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              💡 Right-click on the server icon and "Copy Server ID"
+            </p>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              User ID *
+            </label>
+            <input
+              type="text"
+              value={config.userId || ''}
+              onChange={(e) => onConfigChange({ ...config, userId: e.target.value })}
+              placeholder="123456789012345678"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              💡 Right-click on a user and "Copy User ID"
+            </p>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Role ID *
+            </label>
+            <input
+              type="text"
+              value={config.roleId || ''}
+              onChange={(e) => onConfigChange({ ...config, roleId: e.target.value })}
+              placeholder="123456789012345678"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
+              required
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              💡 Go to Server Settings → Roles → Right-click role → "Copy Role ID"
+            </p>
+          </div>
+
+          <div className="bg-white border border-indigo-200 rounded-lg p-4">
+            <p className="text-xs font-semibold text-gray-700 mb-2">📋 Configuration Preview:</p>
+            <div className="space-y-1 text-xs text-gray-600">
+              <p><strong>Server ID:</strong> {config.guildId || 'Not configured'}</p>
+              <p><strong>User ID:</strong> {config.userId || 'Not configured'}</p>
+              <p><strong>Role ID:</strong> {config.roleId || 'Not configured'}</p>
+            </div>
+            <div className="mt-3 p-2 bg-blue-50 rounded text-xs text-blue-800">
+              💡 The specified role will be added to the user when the Action is triggered.
+            </div>
+          </div>
+        </div>
+      );
+    }
   }
 
   // ============================================
   // GITHUB REACTION CONFIG
   // ============================================
-  if (service === 'github' && type === 'create_issue') {
+  if (service === 'github' && (type === 'create_issue' || type === 'comment_on_issue' || type === 'create_repository')) {
     return (
       <div className="space-y-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
         <div className="flex items-center space-x-2 mb-2">
@@ -111,13 +262,59 @@ export default function ReactionConfigurator({
           <h4 className="font-semibold text-gray-900">GitHub REAction Configuration</h4>
         </div>
         
-        {loadingRepos ? (
+        {/* create_repository has its own form */}
+        {type === 'create_repository' ? (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Repository Name *
+              </label>
+              <input
+                type="text"
+                value={config.name || ''}
+                onChange={(e) => onConfigChange({ ...config, name: e.target.value })}
+                placeholder="my-new-repo"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description (optional)
+              </label>
+              <input
+                type="text"
+                value={config.description || ''}
+                onChange={(e) => onConfigChange({ ...config, description: e.target.value })}
+                placeholder="Created automatically by AREA"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
+              />
+            </div>
+
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="private-repo"
+                checked={config.private || false}
+                onChange={(e) => onConfigChange({ ...config, private: e.target.checked })}
+                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+              />
+              <label htmlFor="private-repo" className="ml-2 block text-sm text-gray-700">
+                Make repository private
+              </label>
+            </div>
+
+            <PlaceholderInfo actionService={actionService} />
+          </>
+        ) : loadingRepos ? (
           <div className="flex items-center justify-center py-8">
             <Loader className="h-6 w-6 text-indigo-600 animate-spin" />
             <span className="ml-2 text-gray-600">Loading repositories...</span>
           </div>
         ) : githubRepos.length > 0 ? (
           <>
+            {/* Repository selector for create_issue and comment_on_issue */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Select Repository *
@@ -143,53 +340,93 @@ export default function ReactionConfigurator({
               </p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Issue Title *
-              </label>
-              <input
-                type="text"
-                value={config.title || ''}
-                onChange={(e) => onConfigChange({ ...config, title: e.target.value })}
-                placeholder="New issue from Discord: {{message.content}}"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                💡 Use placeholders like {`{{message.content}}`} for dynamic values
-              </p>
-            </div>
+            {/* Fields specific to create_issue */}
+            {type === 'create_issue' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Issue Title *
+                  </label>
+                  <input
+                    type="text"
+                    value={config.title || ''}
+                    onChange={(e) => onConfigChange({ ...config, title: e.target.value })}
+                    placeholder="New issue from Discord: {{message.content}}"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    💡 Use placeholders like {`{{message.content}}`} for dynamic values
+                  </p>
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Issue Body (optional)
-              </label>
-              <textarea
-                value={config.body || ''}
-                onChange={(e) => onConfigChange({ ...config, body: e.target.value })}
-                placeholder="Issue created from Discord message by {{message.author}}"
-                rows={3}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
-              />
-            </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Issue Body (optional)
+                  </label>
+                  <textarea
+                    value={config.body || ''}
+                    onChange={(e) => onConfigChange({ ...config, body: e.target.value })}
+                    placeholder="Issue created from Discord message by {{message.author}}"
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Labels (optional)
-              </label>
-              <input
-                type="text"
-                value={config.labels || ''}
-                onChange={(e) => onConfigChange({ ...config, labels: e.target.value })}
-                placeholder="bug, automated"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Comma-separated list of labels
-              </p>
-            </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Labels (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={config.labels || ''}
+                    onChange={(e) => onConfigChange({ ...config, labels: e.target.value })}
+                    placeholder="bug, automated"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Comma-separated list of labels
+                  </p>
+                </div>
+              </>
+            )}
 
-            {/* Placeholders for GitHub */}
+            {/* Fields specific to comment_on_issue */}
+            {type === 'comment_on_issue' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Issue/PR Number *
+                  </label>
+                  <input
+                    type="number"
+                    value={config.issue_number || ''}
+                    onChange={(e) => onConfigChange({ ...config, issue_number: e.target.value })}
+                    placeholder="1"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    💡 The issue or pull request number to comment on
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Comment Text *
+                  </label>
+                  <textarea
+                    value={config.body || ''}
+                    onChange={(e) => onConfigChange({ ...config, body: e.target.value })}
+                    placeholder="Automated comment from AREA: {`{{issue.title}}`}"
+                    rows={4}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-600"
+                    required
+                  />
+                </div>
+              </>
+            )}
+
             <PlaceholderInfo actionService={actionService} />
           </>
         ) : (
@@ -309,10 +546,35 @@ export default function ReactionConfigurator({
           </div>
         )}
         
-        {/* Add Label / Mark as Read */}
-        {(type === 'add_label' || type === 'mark_as_read') && (
+        {/* Add Label */}
+        {type === 'add_label' && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Label Name *
+              </label>
+              <input
+                type="text"
+                value={config.labelName || ''}
+                onChange={(e) => onConfigChange({ ...config, labelName: e.target.value })}
+                placeholder="e.g., Important, Work, Personal"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-600"
+                required
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                💡 The label will be created if it doesn't exist
+              </p>
+            </div>
+            <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
+              💡 This label will be added to the triggering email.
+            </div>
+          </>
+        )}
+        
+        {/* Mark as Read */}
+        {type === 'mark_as_read' && (
           <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-800">
-            💡 This reaction will be automatically applied to the triggering email.
+            💡 The triggering email will be automatically marked as read.
           </div>
         )}
 

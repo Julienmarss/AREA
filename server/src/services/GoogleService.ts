@@ -55,7 +55,7 @@ export class GoogleService {
   async authenticate(userId: string, authData: Partial<GoogleAuthData>): Promise<boolean> {
     try {
       if (!authData.accessToken || !authData.refreshToken) {
-        console.error(`❌ Missing Google credentials for user ${userId}`);
+        console.error(`Missing Google credentials for user ${userId}`);
         return false;
       }
 
@@ -67,10 +67,10 @@ export class GoogleService {
       this.gmail = google.gmail({ version: 'v1', auth: this.oauth2Client });
       this.authenticatedUserId = userId;
 
-      console.log(`✅ Google authenticated for user ${userId}`);
+      console.log(`Google authenticated for user ${userId}`);
       return true;
     } catch (error) {
-      console.error(`❌ Google authentication failed for user ${userId}:`, error);
+      console.error(`Google authentication failed for user ${userId}:`, error);
       return false;
     }
   }
@@ -86,7 +86,7 @@ export class GoogleService {
    * Récupère les derniers emails
    */
   async getRecentEmails(userId: string, maxResults: number = 10): Promise<GmailMessage[]> {
-    const user = userStorage.findById(userId);
+    const user = await userStorage.findById(userId);
     const googleData = user?.services?.google;
 
     if (!googleData?.accessToken) {
@@ -135,7 +135,6 @@ export class GoogleService {
 
     const message = response.data;
     
-    // Parse headers
     const headers = message.payload?.headers || [];
     const getHeader = (name: string) => 
       headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value;
@@ -160,7 +159,7 @@ export class GoogleService {
    */
   async sendEmail(userId: string, params: SendEmailParams): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
-      const user = userStorage.findById(userId);
+      const user = await userStorage.findById(userId);
       const googleData = user?.services?.google;
 
       if (!googleData?.accessToken) {
@@ -173,7 +172,6 @@ export class GoogleService {
         return { success: false, error: 'Gmail client not initialized' };
       }
 
-      // Créer le message au format RFC 2822
       const email = [
         `To: ${params.to}`,
         `Subject: ${params.subject}`,
@@ -182,7 +180,6 @@ export class GoogleService {
         params.body,
       ].join('\n');
 
-      // Encoder en base64url
       const encodedEmail = Buffer.from(email)
         .toString('base64')
         .replace(/\+/g, '-')
@@ -196,10 +193,56 @@ export class GoogleService {
         },
       });
 
-      console.log(`✅ Email sent: ${response.data.id}`);
+      console.log(`Email sent: ${response.data.id}`);
       return { success: true, messageId: response.data.id || undefined };
     } catch (error: any) {
-      console.error('❌ Error sending email:', error);
+      console.error('Error sending email:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Trouve ou crée un label par son nom
+   */
+  async findOrCreateLabel(userId: string, labelName: string): Promise<{ success: boolean; labelId?: string; error?: string }> {
+    try {
+      if (!this.gmail) {
+        return { success: false, error: 'Gmail client not initialized' };
+      }
+
+      const labelsResponse = await this.gmail.users.labels.list({
+        userId: 'me',
+      });
+
+      const labels = labelsResponse.data.labels || [];
+      
+      const existingLabel = labels.find(
+        label => label.name?.toLowerCase() === labelName.toLowerCase()
+      );
+
+      if (existingLabel && existingLabel.id) {
+        console.log(`Found existing label: ${labelName} (${existingLabel.id})`);
+        return { success: true, labelId: existingLabel.id };
+      }
+
+      console.log(`Creating new label: ${labelName}`);
+      const createResponse = await this.gmail.users.labels.create({
+        userId: 'me',
+        requestBody: {
+          name: labelName,
+          labelListVisibility: 'labelShow',
+          messageListVisibility: 'show',
+        },
+      });
+
+      if (createResponse.data.id) {
+        console.log(`Created label: ${labelName} (${createResponse.data.id})`);
+        return { success: true, labelId: createResponse.data.id };
+      }
+
+      return { success: false, error: 'Failed to create label' };
+    } catch (error: any) {
+      console.error('Error finding/creating label:', error);
       return { success: false, error: error.message };
     }
   }
@@ -221,10 +264,10 @@ export class GoogleService {
         },
       });
 
-      console.log(`✅ Label ${labelId} added to message ${messageId}`);
+      console.log(`Label ${labelId} added to message ${messageId}`);
       return { success: true };
     } catch (error: any) {
-      console.error('❌ Error adding label:', error);
+      console.error('Error adding label:', error);
       return { success: false, error: error.message };
     }
   }
@@ -246,10 +289,10 @@ export class GoogleService {
         },
       });
 
-      console.log(`✅ Message ${messageId} marked as read`);
+      console.log(`Message ${messageId} marked as read`);
       return { success: true };
     } catch (error: any) {
-      console.error('❌ Error marking as read:', error);
+      console.error('Error marking as read:', error);
       return { success: false, error: error.message };
     }
   }
@@ -263,7 +306,7 @@ export class GoogleService {
     config: any,
     triggerData: any
   ): Promise<void> {
-    console.log(`🔄 Executing Google reaction: ${reactionType}`);
+    console.log(`Executing Google reaction: ${reactionType}`);
 
     switch (reactionType) {
       case 'send_email':
@@ -285,8 +328,20 @@ export class GoogleService {
         break;
 
       case 'add_label':
-        if (triggerData.email?.id && config.labelId) {
-          await this.addLabel(userId, triggerData.email.id, config.labelId);
+        if (triggerData.email?.id) {
+          const labelName = config.labelName || config.labelId;
+          if (labelName) {
+            const labelResult = await this.findOrCreateLabel(userId, labelName);
+            if (labelResult.success && labelResult.labelId) {
+              await this.addLabel(userId, triggerData.email.id, labelResult.labelId);
+            } else {
+              console.error(`Failed to find/create label: ${labelResult.error}`);
+            }
+          } else {
+            console.error('No labelName provided for add_label reaction');
+          }
+        } else {
+          console.error('No email ID in trigger data for add_label');
         }
         break;
 
@@ -297,7 +352,7 @@ export class GoogleService {
         break;
 
       default:
-        console.error(`❌ Unknown Google reaction type: ${reactionType}`);
+        console.error(`Unknown Google reaction type: ${reactionType}`);
     }
   }
 }

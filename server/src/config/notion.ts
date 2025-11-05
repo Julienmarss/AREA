@@ -1,6 +1,4 @@
 export const NOTION_SCOPES = [
-  // Notion uses a simpler OAuth flow without granular scopes
-  // The integration will have access based on what the user grants
 ];
 
 export const NOTION_AUTH_BASE_URL = 'https://api.notion.com/v1/oauth/authorize';

@@ -7,7 +7,6 @@ import axios from 'axios';
 
 export class SpotifyController {
   
-  // ====== ACTIONS (for testing/debug and manual checks) ======
   static async actionNewTrackPlayed(req: Request, res: Response) {
     const userId = (req.query.userId as string) || 'demo_user';
     const lastTrackId = req.query.lastTrackId as string | undefined;
@@ -69,7 +68,6 @@ export class SpotifyController {
     }
   }
 
-  // ====== REACTIONS (direct execution endpoints) ======
   static async reactAddTrackToPlaylist(req: Request, res: Response) {
     const userId = (req.body.userId as string) || 'demo_user';
     const trackUri = req.body.trackUri as string;
@@ -214,7 +212,6 @@ export class SpotifyController {
         expiresAt,
       });
 
-      // Fetch Spotify user profile to store display name (like GitHub/Discord)
       try {
         const me = await axios.get('https://api.spotify.com/v1/me', {
           headers: {
@@ -306,9 +303,9 @@ export class SpotifyController {
    *       200:
    *         description: Statut de connexion
    */
-  static checkStatus(req: Request, res: Response) {
+  static async checkStatus(req: Request, res: Response) {
     const userId = req.query.userId as string || 'demo_user';
-    const token = InMemoryDB.getToken(userId, 'spotify');
+    const token = await InMemoryDB.getToken(userId, 'spotify');
     
     res.json({
       connected: !!token,
@@ -316,7 +313,6 @@ export class SpotifyController {
     });
   }
 
-  // OAuth-style status to mirror GitHub/Discord endpoints
   static checkStatusOAuth(req: Request, res: Response) {
     const userId = req.query.userId as string || 'demo_user';
     const token = InMemoryDB.getToken(userId, 'spotify');
@@ -328,7 +324,6 @@ export class SpotifyController {
       service: 'spotify',
       username: spotifyData?.username,
       connectedAt: spotifyData?.connectedAt,
-      // for backward-compatibility if frontend expects it
       connected: !!token,
     });
   }

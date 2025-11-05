@@ -21,8 +21,8 @@ export class DiscordController {
     
     const authUrl = getDiscordAuthUrl(state);
     
-    console.log('🔐 Discord OAuth initiated for user:', userId);
-    console.log('📍 Redirect URI:', process.env.DISCORD_REDIRECT_URI);
+    console.log('Discord OAuth initiated for user:', userId);
+    console.log('Redirect URI:', process.env.DISCORD_REDIRECT_URI);
     
     res.json({ authUrl });
   }
@@ -42,12 +42,12 @@ static async callback(req: Request, res: Response) {
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
   
   if (error) {
-    console.error('❌ Discord OAuth error:', error);
+    console.error('Discord OAuth error:', error);
     return res.redirect(`${frontendUrl}/services?error=${error}`);
   }
   
   if (!code || !state) {
-    console.error('❌ Missing code or state');
+    console.error('Missing code or state');
     return res.redirect(`${frontendUrl}/services?error=missing_params`);
   }
   
@@ -57,30 +57,30 @@ static async callback(req: Request, res: Response) {
     );
     const userId = stateData.userId;
     
-    console.log('🔐 Processing Discord OAuth for user:', userId);
+    console.log('Processing Discord OAuth for user:', userId);
     
     const selectedGuildId = guild_id as string;
     
     if (!selectedGuildId) {
-      console.error('❌ No guild selected');
+      console.error('No guild selected');
       return res.redirect(`${frontendUrl}/services?error=no_guild_selected`);
     }
     
-    console.log('✅ Guild selected:', selectedGuildId);
+    console.log('Guild selected:', selectedGuildId);
     
     const { getDiscordClient } = await import('../middleware/autoReactions');
     const client = getDiscordClient();
     
     if (!client || !client.isReady()) {
-      console.error('❌ Discord bot is not online');
+      console.error('Discord bot is not online');
       return res.redirect(`${frontendUrl}/services?error=bot_offline`);
     }
     
-    console.log('🤖 Discord bot status:');
+    console.log('Discord bot status:');
     console.log('   Bot user:', client.user?.tag);
     console.log('   Guilds count:', client.guilds.cache.size);
     
-    console.log('⏳ Waiting for guild propagation...');
+    console.log('Waiting for guild propagation...');
     await new Promise(resolve => setTimeout(resolve, 3000)); // 3 secondes
     
     await client.guilds.fetch();
@@ -88,7 +88,7 @@ static async callback(req: Request, res: Response) {
     const guild = client.guilds.cache.get(selectedGuildId);
     
     if (!guild) {
-      console.error('❌ Bot not in guild:', selectedGuildId);
+      console.error('Bot not in guild:', selectedGuildId);
       console.error('   Available guilds:');
       client.guilds.cache.forEach(g => {
         console.error(`     - ${g.name} (${g.id})`);
@@ -97,14 +97,14 @@ static async callback(req: Request, res: Response) {
       return res.redirect(`${frontendUrl}/services?error=bot_not_in_guild&guild_id=${selectedGuildId}`);
     }
     
-    console.log('✅ Bot found in guild:', guild.name);
+    console.log('Bot found in guild:', guild.name);
     
     const success = await discordService.authenticate(userId, { 
       guildId: selectedGuildId
     });
     
     if (!success) {
-      console.error('❌ Service authentication failed');
+      console.error('Service authentication failed');
       return res.redirect(`${frontendUrl}/services?error=service_auth_failed`);
     }
     
@@ -115,14 +115,14 @@ static async callback(req: Request, res: Response) {
       connectedAt: new Date()
     });
     
-    console.log('✅ Discord authenticated successfully');
+    console.log('Discord authenticated successfully');
     console.log(`   User: ${userId}`);
     console.log(`   Server: ${guild.name} (${selectedGuildId})`);
     
     return res.redirect(`${frontendUrl}/services?connected=discord&guild=${encodeURIComponent(guild.name)}`);
     
   } catch (error: any) {
-    console.error('❌ Discord OAuth callback error:', error.message);
+    console.error('Discord OAuth callback error:', error.message);
     console.error('   Stack:', error.stack);
     return res.redirect(`${frontendUrl}/services?error=auth_failed&details=${encodeURIComponent(error.message)}`);
   }
@@ -135,11 +135,11 @@ static async callback(req: Request, res: Response) {
     try {
       const userId = req.query.userId as string || 'demo_user';
       
-      console.log('🔍 Checking Discord status for user:', userId);
+      console.log('Checking Discord status for user:', userId);
       
       const isAuthenticated = await discordService.isAuthenticated(userId);
       
-      const user = userStorage.findById(userId);
+      const user = await userStorage.findById(userId);
       const discordData = user?.services?.discord;
       
       console.log('  Service authenticated:', isAuthenticated);
@@ -157,7 +157,7 @@ static async callback(req: Request, res: Response) {
         connectedAt: discordData?.connectedAt
       });
     } catch (error) {
-      console.error('❌ Error checking Discord status:', error);
+      console.error('Error checking Discord status:', error);
       res.status(500).json({ 
         authenticated: false, 
         service: 'discord',
@@ -173,9 +173,9 @@ static async callback(req: Request, res: Response) {
     try {
       const userId = req.query.userId as string || 'demo_user';
       
-      console.log('🔌 Disconnecting Discord for user:', userId);
+      console.log('Disconnecting Discord for user:', userId);
       
-      const user = userStorage.findById(userId);
+      const user = await userStorage.findById(userId);
       if (user) {
         userStorage.updateServices(userId, 'discord', {
           connected: false
@@ -188,14 +188,14 @@ static async callback(req: Request, res: Response) {
         (discordService as any).userClients.delete(userId);
       }
       
-      console.log('✅ Discord disconnected for user:', userId);
+      console.log('Discord disconnected for user:', userId);
       
       res.json({
         success: true,
         message: 'Discord disconnected successfully'
       });
     } catch (error) {
-      console.error('❌ Error disconnecting Discord:', error);
+      console.error('Error disconnecting Discord:', error);
       res.status(500).json({ 
         success: false,
         error: 'Failed to disconnect'

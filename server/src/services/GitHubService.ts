@@ -251,16 +251,15 @@ export class GitHubService extends ServiceBase {
 
 async authenticate(userId: string, authData: { accessToken: string }): Promise<boolean> {
   try {
-    console.log('🔐 Authenticating GitHub for user:', userId);
+    console.log('Authenticating GitHub for user:', userId);
     
     this.octokit = new Octokit({
       auth: authData.accessToken
     });
 
-    // Test the authentication by getting user info
     const { data: user } = await this.octokit.rest.users.getAuthenticated();
     
-    console.log('✅ GitHub user authenticated:', user.login);
+    console.log('GitHub user authenticated:', user.login);
 
     this.setAuthData(userId, {
       userId,
@@ -288,7 +287,6 @@ async isAuthenticated(userId: string): Promise<boolean> {
 }
 
   async refreshAuth(userId: string): Promise<boolean> {
-    // GitHub tokens don't expire automatically, but we can test if they're still valid
     if (!this.octokit) return false;
     
     try {
@@ -313,14 +311,16 @@ async isAuthenticated(userId: string): Promise<boolean> {
   async startListening(userId: string, actionId: string, parameters: Record<string, any>): Promise<void> {
     const listenerId = `${userId}_${actionId}_${JSON.stringify(parameters)}`;
     this.activeListeners.set(listenerId, { userId, actionId, parameters });
-    console.log(`Started listening for GitHub action: ${actionId} for user ${userId}`);
+    console.log(`Starting GitHub listener: ${actionId} for user ${userId}`);
     
-    // Note: Real webhook setup would happen here in production
-    // For now, we just store the listener configuration
+    try {
+      await this.ensureWebhook(userId, parameters.owner, parameters.repo, actionId);
+    } catch (error: any) {
+      console.error(`Could not create webhook (continuing anyway):`, error.message);
+    }
   }
 
   async stopListening(userId: string, actionId: string): Promise<void> {
-    // Remove all listeners for this user and action
     for (const [key, listener] of this.activeListeners.entries()) {
       if (listener.userId === userId && listener.actionId === actionId) {
         this.activeListeners.delete(key);
@@ -356,7 +356,6 @@ async isAuthenticated(userId: string): Promise<boolean> {
     }
   }
 
-  // Webhook event handlers
   async handleWebhookEvent(eventType: string, payload: any): Promise<void> {
     console.log(`Received GitHub webhook: ${eventType}`);
     
@@ -401,17 +400,14 @@ async isAuthenticated(userId: string): Promise<boolean> {
       }
     };
 
-    // Check listeners
     for (const [listenerId, listener] of this.activeListeners.entries()) {
       if (listener.actionId === 'new_issue_created') {
         const { owner, repo, labels } = listener.parameters;
         
-        // Check repository match
         if (owner !== triggerData.repository.owner || repo !== triggerData.repository.repo) {
           continue;
         }
         
-        // Check labels filter
         if (labels) {
           const filterLabels = labels.split(',').map((l: string) => l.trim());
           const hasMatchingLabel = filterLabels.some((label: string) => 
@@ -445,7 +441,6 @@ async isAuthenticated(userId: string): Promise<boolean> {
       }
     };
 
-    // Check listeners (similar logic as issues)
     for (const [listenerId, listener] of this.activeListeners.entries()) {
       if (listener.actionId === 'pull_request_opened') {
         const { owner, repo, targetBranch } = listener.parameters;
@@ -481,7 +476,6 @@ async isAuthenticated(userId: string): Promise<boolean> {
       pusher: { name: payload.pusher.name, email: payload.pusher.email }
     };
 
-    // Check listeners
     for (const [listenerId, listener] of this.activeListeners.entries()) {
       if (listener.actionId === 'commit_pushed') {
         const { owner, repo, branch } = listener.parameters;
@@ -512,7 +506,6 @@ async isAuthenticated(userId: string): Promise<boolean> {
       starred_at: payload.starred_at
     };
 
-    // Check listeners
     for (const [listenerId, listener] of this.activeListeners.entries()) {
       if (listener.actionId === 'repository_starred') {
         const { owner, repo } = listener.parameters;
@@ -588,6 +581,94 @@ async isAuthenticated(userId: string): Promise<boolean> {
     } catch (error) {
       console.error('Failed to create GitHub repository:', error);
       return false;
+    }
+  }
+
+  /**
+   * Ensure a webhook exists for the given repository
+   */
+  private async ensureWebhook(userId: string, owner: string, repo: string, actionId: string): Promise<void> {
+    if (!this.octokit) {
+      throw new Error('GitHub not authenticated');
+    }
+
+    const webhookUrl = process.env.GITHUB_WEBHOOK_URL || `${process.env.BACKEND_URL || 'http://localhost:8080'}/api/v1/services/github/webhook`;
+    const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET || 'default-webhook-secret';
+    
+    console.log(`🔍 Checking webhooks for ${owner}/${repo}...`);
+    
+    try {
+      const { data: hooks } = await this.octokit.rest.repos.listWebhooks({
+        owner,
+        repo
+      });
+      
+      const existingHook = hooks.find(hook => 
+        hook.config.url === webhookUrl
+      );
+      
+      if (existingHook) {
+        console.log(`Webhook already exists for ${owner}/${repo} (ID: ${existingHook.id})`);
+        
+        const requiredEvents = this.getRequiredEventsForAction(actionId);
+        const currentEvents = existingHook.events || [];
+        const needsUpdate = requiredEvents.some(event => !currentEvents.includes(event));
+        
+        if (needsUpdate) {
+          const allEvents = Array.from(new Set([...currentEvents, ...requiredEvents]));
+          await this.octokit.rest.repos.updateWebhook({
+            owner,
+            repo,
+            hook_id: existingHook.id,
+            events: allEvents,
+            active: true
+          });
+          console.log(`Updated webhook events for ${owner}/${repo}`);
+        }
+        return;
+      }
+      
+      const events = this.getRequiredEventsForAction(actionId);
+      console.log(`Creating webhook for ${owner}/${repo} with events:`, events);
+      
+      const { data: newHook } = await this.octokit.rest.repos.createWebhook({
+        owner,
+        repo,
+        config: {
+          url: webhookUrl,
+          content_type: 'json',
+          secret: webhookSecret,
+          insecure_ssl: '0'
+        },
+        events,
+        active: true
+      });
+      
+      console.log(`Created webhook for ${owner}/${repo} (ID: ${newHook.id})`);
+      
+    } catch (error: any) {
+      if (error.status === 404) {
+        throw new Error(`Repository ${owner}/${repo} not found or no access`);
+      } else if (error.status === 403) {
+        throw new Error(`No permission to manage webhooks on ${owner}/${repo}`);
+      } else {
+        throw new Error(`Failed to setup webhook: ${error.message}`);
+      }
+    }
+  }
+
+  private getRequiredEventsForAction(actionId: string): string[] {
+    switch (actionId) {
+      case 'new_issue_created':
+        return ['issues'];
+      case 'pull_request_opened':
+        return ['pull_request'];
+      case 'commit_pushed':
+        return ['push'];
+      case 'repository_starred':
+        return ['star', 'watch'];
+      default:
+        return ['*'];
     }
   }
 }

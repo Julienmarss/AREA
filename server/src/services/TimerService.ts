@@ -12,11 +12,10 @@ export class TimerService {
   /**
    * Démarre le service Timer et initialise tous les jobs planifiés
    */
-  static start(): void {
-    console.log('⏰ Starting Timer Service...');
+  static async start(): Promise<void> {
+    console.log('Starting Timer Service...');
     
-    // Charger tous les AREAs avec des actions timer et les planifier
-    const timerAreas = InMemoryDB.getAreas().filter(
+    const timerAreas = (await InMemoryDB.getAreas()).filter(
       area => area.enabled && area.action.service === 'timer'
     );
 
@@ -24,7 +23,7 @@ export class TimerService {
       this.scheduleArea(area);
     }
 
-    console.log(`✅ Timer Service started with ${timerAreas.length} scheduled jobs`);
+    console.log(`Timer Service started with ${timerAreas.length} scheduled jobs`);
   }
 
   /**
@@ -38,17 +37,14 @@ export class TimerService {
 
     switch (type) {
       case 'scheduled_time':
-        // Expression cron personnalisée
         cronExpression = config.cronExpression;
         break;
 
       case 'every_hour':
-        // Toutes les heures à la minute 0
         cronExpression = '0 * * * *';
         break;
 
       case 'every_day': {
-        // Tous les jours à l'heure spécifiée (par défaut 9h)
         const time = config.time || '09:00';
         const [hour, minute] = time.split(':');
         cronExpression = `${minute} ${hour} * * *`;
@@ -56,7 +52,6 @@ export class TimerService {
       }
 
       case 'every_week': {
-        // Tous les lundis à 9h par défaut
         const weekTime = config.time || '09:00';
         const [wHour, wMinute] = weekTime.split(':');
         const day = config.day || '1'; // 1 = lundi
@@ -65,7 +60,6 @@ export class TimerService {
       }
 
       case 'interval': {
-        // Intervalle en minutes
         const interval = config.intervalMinutes || 60;
         if (interval < 60) {
           cronExpression = `*/${interval} * * * *`;
@@ -77,25 +71,22 @@ export class TimerService {
       }
 
       default:
-        console.warn(`⚠️ Unknown timer action type: ${type}`);
+        console.warn(`Unknown timer action type: ${type}`);
         return;
     }
 
     if (!cronExpression || !cron.validate(cronExpression)) {
-      console.error(`❌ Invalid cron expression for AREA ${area.id}: ${cronExpression}`);
+      console.error(`Invalid cron expression for AREA ${area.id}: ${cronExpression}`);
       return;
     }
 
-    // Supprimer l'ancien job s'il existe
     this.cancelAreaJob(area.id);
 
-    // Créer le job
     const job = cron.schedule(
       cronExpression,
       async () => {
-        console.log(`⏰ Timer triggered for AREA: ${area.name} (${area.id})`);
+        console.log(`Timer triggered for AREA: ${area.name} (${area.id})`);
         
-        // Importer dynamiquement pour éviter les dépendances circulaires
         const { AreaExecutor } = await import('./AreaExecutor');
         
         const triggerData = {
@@ -107,7 +98,6 @@ export class TimerService {
           }
         };
 
-        // Exécuter la réaction de l'AREA
         await AreaExecutor.executeMatchingAreas('timer', type, triggerData)
           .catch(err => console.error(`Error executing timer AREA ${area.id}:`, err));
       },
@@ -119,7 +109,6 @@ export class TimerService {
 
     this.jobs.set(area.id, job);
 
-    // Enregistrer le job planifié
     const scheduledJob: ScheduledJob = {
       id: `timer_${area.id}`,
       areaId: area.id,
@@ -131,7 +120,7 @@ export class TimerService {
     };
     this.scheduledJobs.push(scheduledJob);
 
-    console.log(`✅ Timer scheduled: ${area.name} - ${cronExpression} (${timezone})`);
+    console.log(`Timer scheduled: ${area.name} - ${cronExpression} (${timezone})`);
   }
 
   /**
@@ -143,7 +132,7 @@ export class TimerService {
       job.stop();
       this.jobs.delete(areaId);
       this.scheduledJobs = this.scheduledJobs.filter(j => j.areaId !== areaId);
-      console.log(`🗑️ Timer cancelled for AREA: ${areaId}`);
+      console.log(`Timer cancelled for AREA: ${areaId}`);
     }
   }
 
@@ -177,11 +166,11 @@ export class TimerService {
   static stopAll(): void {
     for (const [areaId, job] of this.jobs.entries()) {
       job.stop();
-      console.log(`⏸️ Stopped timer job: ${areaId}`);
+      console.log(`Stopped timer job: ${areaId}`);
     }
     this.jobs.clear();
     this.scheduledJobs = [];
-    console.log('⏰ All timer jobs stopped');
+    console.log('All timer jobs stopped');
   }
 
   /**

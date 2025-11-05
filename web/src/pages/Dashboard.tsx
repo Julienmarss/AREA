@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { Plus, Zap, Settings, CheckCircle, XCircle, Github, MessageSquare, Music, Loader } from 'lucide-react';
 import { githubAPI, discordAPI, spotifyAPI, areasAPI } from '../services/api';
 import { Area } from '../types';
+import AreaDetailsModal from '../components/AreaDetailsModal';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -15,6 +16,10 @@ export default function Dashboard() {
   const [discordConnected, setDiscordConnected] = useState(false);
   const [spotifyConnected, setSpotifyConnected] = useState(false);
   const [servicesLoading, setServicesLoading] = useState(true);
+
+  // Modal state
+  const [selectedArea, setSelectedArea] = useState<Area | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -105,6 +110,28 @@ export default function Dashboard() {
       await loadDashboardData();
     } catch (error) {
       console.error('❌ Failed to delete area:', error);
+    }
+  };
+
+  const handleOpenAreaDetails = (area: Area) => {
+    setSelectedArea(area);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setSelectedArea(null);
+  };
+
+  const handleAreaUpdated = async () => {
+    await loadDashboardData();
+    // Update the selected area with fresh data
+    if (selectedArea) {
+      const updatedAreas = await areasAPI.getAll(user?.id);
+      const updatedArea = updatedAreas.areas?.find((a: Area) => a.id === selectedArea.id);
+      if (updatedArea) {
+        setSelectedArea(updatedArea);
+      }
     }
   };
 
@@ -288,7 +315,8 @@ export default function Dashboard() {
             {areas.map((area) => (
               <div
                 key={area.id}
-                className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 transition"
+                className="border border-gray-200 rounded-lg p-4 hover:border-indigo-300 hover:shadow-md transition cursor-pointer"
+                onClick={() => handleOpenAreaDetails(area)}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
@@ -316,7 +344,10 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center space-x-2">
                     <button
-                      onClick={() => handleToggleArea(area.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleArea(area.id);
+                      }}
                       className={`px-3 py-1 rounded-lg text-sm font-medium transition ${
                         area.enabled
                           ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
@@ -326,7 +357,10 @@ export default function Dashboard() {
                       {area.enabled ? 'Disable' : 'Enable'}
                     </button>
                     <button
-                      onClick={() => handleDeleteArea(area.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteArea(area.id);
+                      }}
                       className="px-3 py-1 bg-red-100 text-red-800 rounded-lg text-sm font-medium hover:bg-red-200 transition"
                     >
                       Delete
@@ -338,6 +372,16 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* AREA Details Modal */}
+      {selectedArea && (
+        <AreaDetailsModal
+          area={selectedArea}
+          isOpen={isModalOpen}
+          onClose={handleCloseModal}
+          onUpdate={handleAreaUpdated}
+        />
+      )}
     </div>
   );
 }

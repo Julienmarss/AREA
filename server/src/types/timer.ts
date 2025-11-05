@@ -1,24 +1,16 @@
-// Types pour le service Timer/Schedule
 
 export interface TimerActionConfig {
-  // Pour 'scheduled_time' action
-  cronExpression?: string;  // Expression cron (ex: "0 9 * * *" = tous les jours à 9h)
-  timezone?: string;        // Timezone (ex: "Europe/Paris")
-  
-  // Pour 'interval' action
-  intervalMinutes?: number; // Intervalle en minutes
-  
-  // Pour 'specific_time' action
-  time?: string;           // Heure spécifique (ex: "09:00")
-  days?: string[];         // Jours de la semaine (ex: ["monday", "friday"])
+  cronExpression?: string;
+  timezone?: string;
+  intervalMinutes?: number;
+  time?: string;
+  days?: string[];
 }
 
 export interface TimerReactionConfig {
-  // Pour 'delay_action' reaction
-  delayMinutes?: number;   // Délai en minutes avant d'exécuter l'action
+  delayMinutes?: number;
   
-  // Pour 'schedule_action' reaction
-  scheduledTime?: string;  // Heure planifiée (ex: "14:30")
+  scheduledTime?: string;
 }
 
 export interface ScheduledJob {

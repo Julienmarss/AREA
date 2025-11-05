@@ -26,7 +26,7 @@ export const getDiscordAuthUrl = (state: string) => {
   });
 
   const url = `${baseUrl}?${params.toString()}`;
-  console.log('🔗 Discord OAuth URL generated');
+  console.log('Discord OAuth URL generated');
   console.log('   Client ID:', clientId);
   console.log('   Redirect URI:', redirectUri);
   console.log('   Scopes:', DISCORD_SCOPES.join(', '));

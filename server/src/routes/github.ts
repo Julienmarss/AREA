@@ -1,4 +1,3 @@
-// server/src/routes/github.ts
 import { Router, Request, Response } from 'express';
 import { body, param, validationResult } from 'express-validator';
 import { GitHubService } from '../services/GitHubService';
@@ -94,7 +93,7 @@ router.post('/auth', authenticate, [
     const success = await githubService.authenticate(userId, { accessToken });
 
     if (success) {
-      const user = userStorage.findById(userId);
+      const user = await userStorage.findById(userId);
       if (user) {
         try {
           const response = await fetch('https://api.github.com/user', {
@@ -146,7 +145,7 @@ router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
     const userId = req.user!.id;
     const isAuthenticated = await githubService.isAuthenticated(userId);
 
-    const user = userStorage.findById(userId);
+    const user = await userStorage.findById(userId);
     const githubData = user?.services.github;
 
     res.json({
@@ -287,7 +286,7 @@ router.post('/webhook', verifyGitHubWebhook, async (req: Request, res: Response)
       return res.status(400).json({ error: 'Missing event type header' });
     }
 
-    console.log(`📥 Received GitHub webhook: ${eventType}`);
+    console.log(`Received GitHub webhook: ${eventType}`);
     
     await githubService.handleWebhookEvent(eventType, payload);
     
@@ -511,12 +510,11 @@ function getRequiredWebhookEvents(actionId: string): string[] {
 }
 
 
-// GET user repositories
 router.get('/repositories', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
     
-    const user = userStorage.findById(userId);
+    const user = await userStorage.findById(userId);
     const githubData = user?.services?.github;
     
     if (!githubData?.accessToken) {

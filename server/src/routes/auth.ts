@@ -8,7 +8,6 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-// Validation middleware
 const handleValidationErrors = (req: Request, res: Response, next: any) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -21,7 +20,6 @@ const handleValidationErrors = (req: Request, res: Response, next: any) => {
   next();
 };
 
-// POST /api/v1/auth/register
 router.post('/register', [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
@@ -31,8 +29,7 @@ router.post('/register', [
   try {
     const { email, password, firstName, lastName }: RegisterRequest = req.body;
 
-    // Check if user already exists
-    const existingUser = userStorage.findByEmail(email);
+    const existingUser = await userStorage.findByEmail(email);
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -40,10 +37,8 @@ router.post('/register', [
       });
     }
 
-    // Hash password
     const passwordHash = await hashPassword(password);
 
-    // Create user
     const user: User = {
       id: uuidv4(),
       email,
@@ -54,12 +49,11 @@ router.post('/register', [
       services: {}
     };
 
-    userStorage.create(user);
+    await userStorage.create(user);
 
-    // Generate token
     const token = generateToken(user.id);
 
-    console.log(`✅ User registered: ${email}`);
+    console.log(`User registered: ${email}`);
 
     res.status(201).json({
       success: true,
@@ -80,7 +74,6 @@ router.post('/register', [
   }
 });
 
-// POST /api/v1/auth/login
 router.post('/login', [
   body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
   body('password').notEmpty().withMessage('Password is required')
@@ -88,8 +81,7 @@ router.post('/login', [
   try {
     const { email, password }: LoginRequest = req.body;
 
-    // Find user
-    const user = userStorage.findByEmail(email);
+    const user = await userStorage.findByEmail(email);
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -97,7 +89,6 @@ router.post('/login', [
       });
     }
 
-    // Check password
     const isValidPassword = await comparePassword(password, user.passwordHash);
     if (!isValidPassword) {
       return res.status(401).json({
@@ -106,10 +97,9 @@ router.post('/login', [
       });
     }
 
-    // Generate token
     const token = generateToken(user.id);
 
-    console.log(`✅ User logged in: ${email}`);
+    console.log(`User logged in: ${email}`);
 
     res.json({
       success: true,
@@ -130,10 +120,9 @@ router.post('/login', [
   }
 });
 
-// GET /api/v1/auth/me - Get current user (protected)
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
   try {
-    const user = userStorage.findById(req.user!.id);
+    const user = await userStorage.findById(req.user!.id);
     
     if (!user) {
       return res.status(404).json({
@@ -161,10 +150,7 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /api/v1/auth/logout (optionnel, juste pour symmetrie)
 router.post('/logout', authenticate, (req: AuthRequest, res: Response) => {
-  // Avec JWT, le logout est géré côté client en supprimant le token
-  // On pourrait implémenter une blacklist de tokens ici si nécessaire
   res.json({
     success: true,
     message: 'Logged out successfully'

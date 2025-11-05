@@ -51,7 +51,6 @@ export interface DiscordRole {
   guildId: string;
 }
 
-// Action trigger data types
 export interface MessagePostedTriggerData {
   message: DiscordMessage;
   channel: DiscordChannel;
@@ -73,7 +72,6 @@ export interface UserJoinedServerTriggerData {
   joinedAt: Date;
 }
 
-// Reaction parameter types
 export interface SendMessageParameters {
   channelId: string;
   content: string;
@@ -114,7 +112,6 @@ export interface DiscordEmbed {
   timestamp?: Date;
 }
 
-// Configuration types
 export interface DiscordBotConfig {
   token: string;
   clientId: string;

@@ -83,7 +83,7 @@ services:
     ports:
       - "8081:8081"
     environment:
-      VITE_API_URL: http://localhost:8081
+      VITE_API_URL: http://localhost:8080
     volumes:
       - ./web:/app
       - /app/node_modules

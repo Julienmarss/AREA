@@ -18,7 +18,7 @@ export interface CreateIssueParams extends GitHubRepoRef {
 }
 
 export interface CommentParams extends GitHubRepoRef {
-  issue_number: number; // issue or PR number
+  issue_number: number;
   body: string;
 }
 

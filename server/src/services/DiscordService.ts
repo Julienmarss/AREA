@@ -150,11 +150,11 @@ export class DiscordService extends ServiceBase {
 
   async authenticate(userId: string, authData: { botToken?: string; guildId: string }): Promise<boolean> {
     try {
-      console.log(`🔐 Authenticating Discord for user ${userId}...`);
+      console.log(`Authenticating Discord for user ${userId}...`);
       
       const client = getDiscordClient();
       if (!client || !client.isReady()) {
-        console.error('❌ Discord bot is not ready');
+        console.error('Discord bot is not ready');
         return false;
       }
 
@@ -163,7 +163,7 @@ export class DiscordService extends ServiceBase {
         throw new Error(`Bot is not in the server with ID ${authData.guildId}`);
       }
 
-      console.log(`✅ Bot found in guild: ${guild.name}`);
+      console.log(`Bot found in guild: ${guild.name}`);
 
       this.setAuthData(userId, {
         userId,
@@ -175,11 +175,11 @@ export class DiscordService extends ServiceBase {
         }
       });
 
-      console.log(`✅ Discord authenticated successfully for user ${userId}`);
+      console.log(`Discord authenticated successfully for user ${userId}`);
       return true;
 
     } catch (error: any) {
-      console.error(`❌ Discord authentication failed for user ${userId}:`, error.message);
+      console.error(`Discord authentication failed for user ${userId}:`, error.message);
       throw error;
     }
   }
@@ -188,14 +188,14 @@ async isAuthenticated(userId: string): Promise<boolean> {
   const client = getDiscordClient();
   const authData = this.getAuthData(userId);
   
-  const user = userStorage.findById(userId);
+  const user = await userStorage.findById(userId);
   const discordData = user?.services?.discord;
   
   const isAuth = client?.isReady() === true && 
                  authData !== undefined && 
                  discordData?.connected === true;
   
-  console.log(`🔍 Discord isAuthenticated for ${userId}:`, isAuth);
+  console.log(`Discord isAuthenticated for ${userId}:`, isAuth);
   return isAuth;
 }
 
@@ -274,7 +274,7 @@ async isAuthenticated(userId: string): Promise<boolean> {
       }
 
       await channel.send(messageOptions);
-      console.log(`✅ Message sent to channel ${parameters.channelId}`);
+      console.log(`Message sent to channel ${parameters.channelId}`);
       return true;
     } catch (error) {
       console.error('Failed to send message to channel:', error);
@@ -288,7 +288,7 @@ async isAuthenticated(userId: string): Promise<boolean> {
       if (!user) return false;
 
       await user.send(parameters.content);
-      console.log(`✅ DM sent to user ${parameters.userId}`);
+      console.log(`DM sent to user ${parameters.userId}`);
       return true;
     } catch (error) {
       console.error('Failed to send direct message:', error);
@@ -308,7 +308,7 @@ async isAuthenticated(userId: string): Promise<boolean> {
       if (!role) return false;
 
       await member.roles.add(role);
-      console.log(`✅ Role ${parameters.roleId} added to user ${parameters.userId}`);
+      console.log(`Role ${parameters.roleId} added to user ${parameters.userId}`);
       return true;
     } catch (error) {
       console.error('Failed to add role to user:', error);

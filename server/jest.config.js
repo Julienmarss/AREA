@@ -6,14 +6,11 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'json'],
 
   transformIgnorePatterns: [
-    'node_modules/(?!(@octokit|nanoid|uuid|before-after-hook|universal-user-agent|@octokit\\/.*)/)',
+    'node_modules/(?!(@octokit|nanoid|uuid|before-after-hook|universal-user-agent)/)',
   ],
 
   transform: {
-    '^.+\\.ts$': ['ts-jest', { 
-      isolatedModules: true,
-      useESM: false
-    }],
+    '^.+\\.ts$': 'ts-jest',
   },
 
   collectCoverageFrom: [

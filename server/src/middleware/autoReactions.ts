@@ -28,17 +28,17 @@ async function initDiscordClient() {
 
   return new Promise((resolve, reject) => {
     discordClient!.once('ready', () => {
-      console.log('✅ Discord bot is online:', discordClient!.user?.tag);
+      console.log('Discord bot is online:', discordClient!.user?.tag);
       setupDiscordInteractions();
       resolve(discordClient);
     });
 
     discordClient!.on('error', (error) => {
-      console.error('❌ Discord client error:', error);
+      console.error('Discord client error:', error);
       reject(error);
     });
 
-    console.log('🔌 Connecting Discord bot...');
+    console.log('Connecting Discord bot...');
     discordClient!.login(DISCORD_CONFIG.BOT_TOKEN).catch(reject);
   });
 }
@@ -55,7 +55,7 @@ function setupDiscordInteractions() {
       console.error('Error handling Discord interaction:', error);
       
       if (interaction.isRepliable()) {
-        const reply = { content: '❌ Une erreur est survenue', ephemeral: true };
+        const reply = { content: 'Une erreur est survenue', ephemeral: true };
         if (interaction.deferred || interaction.replied) {
           await interaction.editReply(reply);
         } else {
@@ -85,6 +85,25 @@ function setupDiscordInteractions() {
 
     await AreaExecutor.executeMatchingAreas('discord', 'message_posted_in_channel', triggerData)
       .catch(err => console.error('Error executing AREAs:', err));
+    
+    if (message.mentions.users.size > 0) {
+      for (const [userId, mentionedUser] of message.mentions.users) {
+        const mentionTriggerData = {
+          ...triggerData,
+          mention: {
+            userId: userId,
+            username: mentionedUser.username,
+            discriminator: mentionedUser.discriminator,
+            tag: mentionedUser.tag,
+          }
+        };
+        
+        console.log(`User mention detected: ${mentionedUser.tag} in message "${message.content}"`);
+        
+        await AreaExecutor.executeMatchingAreas('discord', 'user_mentioned', mentionTriggerData)
+          .catch(err => console.error('Error executing user_mentioned AREAs:', err));
+      }
+    }
   });
 
   discordClient.on('guildMemberAdd', async (member) => {
@@ -108,7 +127,7 @@ function setupDiscordInteractions() {
 }
 
 export function setupAutoReactions() {
-  console.log('🤖 Setting up Discord bot...');
+  console.log('Setting up Discord bot...');
   initDiscordClient().catch(console.error);
 }
 

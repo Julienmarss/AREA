@@ -18,14 +18,14 @@ export class AreaExecutor {
     actionType: string,
     triggerData: any
   ): Promise<void> {
-    const matchingAreas = InMemoryDB.getAreas().filter(area => 
+    const matchingAreas = (await InMemoryDB.getAreas()).filter(area => 
       area.enabled &&
       area.action.service === serviceName &&
       area.action.type === actionType &&
       this.matchesActionConfig(area, triggerData)
     );
 
-    console.log(`🎯 Found ${matchingAreas.length} matching AREAs for ${serviceName}.${actionType}`);
+    console.log(`Found ${matchingAreas.length} matching AREAs for ${serviceName}.${actionType}`);
 
     for (const area of matchingAreas) {
       try {
@@ -35,9 +35,9 @@ export class AreaExecutor {
           lastTriggered: new Date(),
         });
         
-        console.log(`✅ AREA executed: ${area.name} (${area.id})`);
+        console.log(`AREA executed: ${area.name} (${area.id})`);
       } catch (error) {
-        console.error(`❌ Failed to execute AREA ${area.id}:`, error);
+        console.error(`Failed to execute AREA ${area.id}:`, error);
       }
     }
   }
@@ -68,16 +68,30 @@ export class AreaExecutor {
     }
 
     if (area.action.service === 'discord') {
-      if (config.channelId && triggerData.message?.channelId !== config.channelId) {
-        return false;
-      }
+      if (area.action.type === 'message_posted_in_channel') {
+        if (config.channelId && triggerData.message?.channelId !== config.channelId) {
+          return false;
+        }
 
-      if (config.keyword && !triggerData.message?.content?.toLowerCase().includes(config.keyword.toLowerCase())) {
-        return false;
-      }
+        if (config.keyword && !triggerData.message?.content?.toLowerCase().includes(config.keyword.toLowerCase())) {
+          return false;
+        }
 
-      if (config.authorId && triggerData.message?.authorId !== config.authorId) {
-        return false;
+        if (config.authorId && triggerData.message?.authorId !== config.authorId) {
+          return false;
+        }
+      }
+      
+      if (area.action.type === 'user_mentioned') {
+        if (config.userId && triggerData.mention?.userId !== config.userId) {
+          return false;
+        }
+      }
+      
+      if (area.action.type === 'user_joined_server') {
+        if (config.guildId && triggerData.guild?.id !== config.guildId) {
+          return false;
+        }
       }
     }
 
@@ -114,7 +128,7 @@ export class AreaExecutor {
   private static async executeArea(area: AREA, triggerData: any): Promise<void> {
     const { service, type, config } = area.reaction;
 
-    console.log(`🔄 Executing REAction: ${service}.${type}`);
+    console.log(`Executing REAction: ${service}.${type}`);
 
     const enrichedConfig = this.enrichConfig(config, triggerData);
 
@@ -136,7 +150,7 @@ export class AreaExecutor {
         break;
 
       default:
-        console.error(`❌ Unknown service: ${service}`);
+        console.error(`Unknown service: ${service}`);
     }
   }
 
@@ -185,6 +199,12 @@ export class AreaExecutor {
       result = result.replace(/\{\{message\.author\}\}/g, triggerData.message.authorUsername || '');
       result = result.replace(/\{\{message\.channel\}\}/g, triggerData.message.channelName || '');
     }
+    
+    if (triggerData.mention) {
+      result = result.replace(/\{\{mention\.username\}\}/g, triggerData.mention.username || '');
+      result = result.replace(/\{\{mention\.tag\}\}/g, triggerData.mention.tag || '');
+      result = result.replace(/\{\{mention\.userId\}\}/g, triggerData.mention.userId || '');
+    }
 
     if (triggerData.trackName) {
       result = result.replace(/\{\{track\.name\}\}/g, triggerData.trackName || '');
@@ -207,35 +227,31 @@ export class AreaExecutor {
     config: any,
     triggerData: any
   ): Promise<void> {
-    console.log(`🔧 Executing GitHub reaction for user: ${userId}`);
+    console.log(`Executing GitHub reaction for user: ${userId}`);
     
-    // ✅ Créer une instance dédiée et l'authentifier
     const githubService = new GitHubService();
     
-    // Récupérer le token depuis userStorage
-    const user = userStorage.findById(userId);
+    const user = await userStorage.findById(userId);
     const githubData = user?.services?.github;
     
     if (!githubData?.accessToken) {
-      console.error(`❌ No GitHub token found for user ${userId}`);
+      console.error(`No GitHub token found for user ${userId}`);
       throw new Error('GitHub not authenticated for this user');
     }
     
-    console.log(`✅ Found GitHub token for user ${userId}`);
+    console.log(`Found GitHub token for user ${userId}`);
     
-    // Authentifier le service avec le token
     const authenticated = await githubService.authenticate(userId, { 
       accessToken: githubData.accessToken 
     });
     
     if (!authenticated) {
-      console.error(`❌ Failed to authenticate GitHub service for user ${userId}`);
+      console.error(`Failed to authenticate GitHub service for user ${userId}`);
       throw new Error('GitHub authentication failed');
     }
     
-    console.log(`✅ GitHub service authenticated for user ${userId}`);
+    console.log(`GitHub service authenticated for user ${userId}`);
     
-    // Exécuter la réaction
     await githubService.executeReaction(reactionType, userId, config, triggerData);
   }
 
@@ -245,35 +261,31 @@ export class AreaExecutor {
     config: any,
     triggerData: any
   ): Promise<void> {
-    console.log(`🔧 Executing Discord reaction for user: ${userId}`);
+    console.log(`Executing Discord reaction for user: ${userId}`);
     
-    // ✅ Créer une instance dédiée
     const discordService = new DiscordService();
     
-    // Récupérer les données Discord depuis userStorage
-    const user = userStorage.findById(userId);
+    const user = await userStorage.findById(userId);
     const discordData = user?.services?.discord;
     
     if (!discordData?.guildId) {
-      console.error(`❌ No Discord credentials found for user ${userId}`);
+      console.error(`No Discord credentials found for user ${userId}`);
       throw new Error('Discord not authenticated for this user');
     }
     
-    console.log(`✅ Found Discord credentials for user ${userId} (guild: ${discordData.guildId})`);
+    console.log(`Found Discord credentials for user ${userId} (guild: ${discordData.guildId})`);
     
-    // Authentifier le service (Discord utilise un bot global)
     const authenticated = await discordService.authenticate(userId, {
       guildId: discordData.guildId
     });
     
     if (!authenticated) {
-      console.error(`❌ Failed to authenticate Discord service for user ${userId}`);
+      console.error(`Failed to authenticate Discord service for user ${userId}`);
       throw new Error('Discord authentication failed');
     }
     
-    console.log(`✅ Discord service authenticated for user ${userId}`);
+    console.log(`Discord service authenticated for user ${userId}`);
     
-    // Exécuter la réaction
     await discordService.executeReaction(reactionType, userId, config, triggerData);
   }
 
@@ -292,15 +304,14 @@ export class AreaExecutor {
         }
         const result = await SpotifyService.addTrackToPlaylist(userId, trackUri, config.playlistId);
         if (result.success) {
-          console.log(`✅ Track added to playlist ${config.playlistId}`);
+          console.log(`Track added to playlist ${config.playlistId}`);
         } else {
-          console.error(`❌ Error: ${result.error}`);
+          console.error(`Error: ${result.error}`);
         }
         break;
       }
 
       case 'create_playlist': {
-        // Ensure a valid name
         const fallbackName = triggerData.trackName
           ? `AREA - ${triggerData.trackName}`
           : (triggerData.artistName ? `AREA - ${triggerData.artistName}` : `AREA Playlist`);
@@ -315,9 +326,9 @@ export class AreaExecutor {
           isPublic
         );
         if (result.success) {
-          console.log(`✅ Playlist created: ${result.playlistId}`);
+          console.log(`Playlist created: ${result.playlistId}`);
         } else {
-          console.error(`❌ Error: ${result.error}`);
+          console.error(`Error: ${result.error}`);
         }
         break;
       }
@@ -338,9 +349,9 @@ export class AreaExecutor {
         }
         const result = await SpotifyService.followArtist(userId, artistId);
         if (result.success) {
-          console.log(`✅ Artist followed: ${artistId}`);
+          console.log(`Artist followed: ${artistId}`);
         } else {
-          console.error(`❌ Error: ${result.error}`);
+          console.error(`Error: ${result.error}`);
         }
         break;
       }
@@ -351,21 +362,17 @@ export class AreaExecutor {
           return;
         }
         const resolvedArtist = (() => {
-          // 1) explicit id in config
           if (config.artistId) {
             const matchById = triggerData.artists?.find((a: any) => a.id === config.artistId);
             return { id: config.artistId, name: matchById?.name || config.artistName };
           }
-          // 2) explicit name in config
           if (config.artistName && triggerData.artists?.length) {
             const m = triggerData.artists.find((a: any) => a.name?.toLowerCase() === String(config.artistName).toLowerCase());
             if (m) return { id: m.id, name: m.name };
           }
-          // 3) fallback to triggerData primary
           if (triggerData.artistId || triggerData.artistName) {
             return { id: triggerData.artistId, name: triggerData.artistName };
           }
-          // 4) fallback to first artist in list
           if (triggerData.artists?.length) {
             return { id: triggerData.artists[0].id, name: triggerData.artists[0].name };
           }
@@ -409,7 +416,7 @@ export class AreaExecutor {
         );
 
         if (addResult.success) {
-          console.log(`✅ Playlist "${playlistName}" created with ${topTracks.length} tracks`);
+          console.log(`Playlist "${playlistName}" created with ${topTracks.length} tracks`);
         } else {
           console.error(`Error adding tracks: ${addResult.error}`);
         }
@@ -426,21 +433,18 @@ private static async executeGoogleReaction(
 ): Promise<void> {
   console.log(`🔧 Executing Google reaction for user: ${userId}`);
   
-  // Créer une instance dédiée
   const googleService = new GoogleService();
   
-  // Récupérer les données Google depuis userStorage
-  const user = userStorage.findById(userId);
+  const user = await userStorage.findById(userId);
   const googleData = user?.services?.google;
   
   if (!googleData?.accessToken) {
-    console.error(`❌ No Google credentials found for user ${userId}`);
+    console.error(`No Google credentials found for user ${userId}`);
     throw new Error('Google not authenticated for this user');
   }
   
-  console.log(`✅ Found Google credentials for user ${userId}`);
+  console.log(`Found Google credentials for user ${userId}`);
   
-  // Authentifier le service
   const authenticated = await googleService.authenticate(userId, {
     accessToken: googleData.accessToken,
     refreshToken: googleData.refreshToken,
@@ -448,14 +452,12 @@ private static async executeGoogleReaction(
   });
   
   if (!authenticated) {
-    console.error(`❌ Failed to authenticate Google service for user ${userId}`);
+    console.error(`Failed to authenticate Google service for user ${userId}`);
     throw new Error('Google authentication failed');
   }
   
-  console.log(`✅ Google service authenticated for user ${userId}`);
+  console.log(`Google service authenticated for user ${userId}`);
   
-  // Exécuter la réaction
   await googleService.executeReaction(reactionType, userId, config, triggerData);
 }
-
 }

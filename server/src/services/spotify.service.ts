@@ -4,22 +4,18 @@ import { InMemoryDB } from '../models/area.model';
 
 export class SpotifyService {
   
-  // ==================== AUTHENTIFICATION ====================
-  
   /**
    * Créer une instance Spotify API avec le token de l'utilisateur
    */
   private static async getUserSpotifyApi(userId: string): Promise<SpotifyWebApi | null> {
-    const token = InMemoryDB.getToken(userId, 'spotify');
+    const token = await InMemoryDB.getToken(userId, 'spotify');
     if (!token) return null;
 
-    // Vérifier que les champs Spotify requis sont présents
     if (!token.refreshToken || !token.expiresAt) {
       console.error('Spotify token missing required fields');
       return null;
     }
 
-    // Vérifier si le token est expiré
     if (new Date() >= token.expiresAt) {
       const refreshed = await this.refreshToken(userId, token.refreshToken);
       if (!refreshed) return null;
@@ -31,7 +27,7 @@ export class SpotifyService {
       redirectUri: process.env.SPOTIFY_REDIRECT_URI,
     });
 
-    const freshToken = InMemoryDB.getToken(userId, 'spotify');
+    const freshToken = await InMemoryDB.getToken(userId, 'spotify');
     if (!freshToken || !freshToken.refreshToken) return null;
 
     userApi.setAccessToken(freshToken.accessToken);
@@ -66,7 +62,6 @@ export class SpotifyService {
     }
   }
   
-  // ==================== ACTIONS (Triggers) ====================
   
   /**
    * @openapi
@@ -285,7 +280,6 @@ export class SpotifyService {
     }
   }
   
-  // ==================== REACTIONS ====================
   
   /**
    * @openapi
@@ -303,14 +297,10 @@ export class SpotifyService {
 
     const normalizePlaylistId = (value: string): string => {
       let v = value.trim();
-      // Strip URL query
       if (v.includes('?')) v = v.split('?')[0];
-      // Handle full URLs
       const urlMatch = v.match(/playlist\/([a-zA-Z0-9]+)/);
       if (urlMatch) return urlMatch[1];
-      // Handle spotify:playlist:ID
       if (v.startsWith('spotify:playlist:')) return v.split(':').pop() as string;
-      // If it's a full URI like spotify:playlist:ID?si=...
       if (v.includes(':')) {
         const parts = v.split(':');
         return parts[parts.length - 1];
@@ -379,8 +369,6 @@ export class SpotifyService {
       return { success: false, error: error.message };
     }
   }
-  
-  // ==================== HELPERS ====================
   
   /**
    * @openapi

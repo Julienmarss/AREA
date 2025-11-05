@@ -43,10 +43,10 @@ export const getSpotifyAuthUrl = (state: string) => {
     redirect_uri: process.env.SPOTIFY_REDIRECT_URI || '',
     state: state,
     scope: SPOTIFY_SCOPES.join(' '),
-    show_dialog: 'true', // Force l'affichage du dialogue d'autorisation
+    show_dialog: 'true',
   });
 
   const url = `${baseUrl}?${params.toString()}`;
-  console.log('URL générée:', url); // Debug
+  console.log('URL générée:', url);
   return url;
 };

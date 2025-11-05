@@ -1,4 +1,3 @@
-// web/src/pages/Services.tsx
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { githubAPI, discordAPI, spotifyAPI, googleAPI, timerAPI } from '../services/api';

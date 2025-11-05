@@ -1,4 +1,3 @@
-// server/src/index.ts
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -23,6 +22,9 @@ import { GmailPollingService } from './services/gmail.polling.service';
 import { TimerService } from './services/TimerService';
 
 import { setupAutoReactions } from './middleware/autoReactions';
+import { initializeDatabase, testConnection } from './database/init';
+import { dbErrorHandler } from './middleware/dbErrorHandler';
+import { getPoolStats } from './config/database';
 
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
@@ -64,10 +66,15 @@ app.use(morgan('dev'));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 app.get('/health', (req: Request, res: Response) => {
+  const poolStats = getPoolStats();
   res.json({
     status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
+    database: {
+      pool: poolStats,
+      connected: true
+    },
     hooksRunning: true,
   });
 });
@@ -180,6 +187,8 @@ app.use('/api/v1/services/github', githubRoutes);
 app.use('/api/v1/services/google', googleRoutes);
 app.use('/api/v1/services/timer', timerRoutes);
 
+app.use(dbErrorHandler);
+
 app.use((req: Request, res: Response) => {
   res.status(404).json({
     error: 'Not Found',
@@ -196,46 +205,68 @@ app.use((err: Error, req: Request, res: Response, next: any) => {
 });
 
 app.listen(PORT, async () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🌐 API: http://localhost:${PORT}`);
-  console.log(`📋 About: http://localhost:${PORT}/about.json`);
-  console.log(`📚 Swagger docs: http://localhost:${PORT}/api-docs`);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`API: http://localhost:${PORT}`);
+  console.log(`About: http://localhost:${PORT}/about.json`);
+  console.log(`Swagger docs: http://localhost:${PORT}/api-docs`);
   
-  console.log('🎵 Starting Spotify hooks service...');
+  try {
+    const dbConnected = await testConnection();
+    if (dbConnected) {
+      await initializeDatabase();
+      console.log('Database ready');
+    } else {
+      console.error('Database connection failed, but server will continue');
+    }
+  } catch (error) {
+    console.error('Database initialization error:', error);
+  }
+  
+  console.log('Starting Spotify hooks service...');
   HooksService.start();
   
-  console.log('📧 Starting Gmail polling service...');
+  console.log('Starting Gmail polling service...');
   GmailPollingService.start();
   
-  console.log('⏰ Starting Timer service...');
+  console.log('Starting Timer service...');
   TimerService.start();
   
-  console.log('🤖 Initializing Discord bot (slash commands)...');
+  console.log('Initializing Discord bot (slash commands)...');
   setupAutoReactions();
   
-  console.log('🔧 Initializing AREA services...');
+  console.log('Initializing AREA services...');
   const discordService = new DiscordService();
   await discordService.initialize();
 
   const githubService = new GitHubService();
   await githubService.initialize();
 
-  console.log('✅ All services initialized and ready!');
+  console.log('All services initialized and ready!');
 });
 
-process.on('SIGTERM', () => {
+process.on('SIGTERM', async () => {
   console.log('SIGTERM reçu, arrêt gracieux...');
   HooksService.stop();
   GmailPollingService.stop();
   TimerService.stopAll();
+  
+  const pool = (await import('./config/database')).default;
+  await pool.end();
+  console.log('Database pool closed');
+  
   process.exit(0);
 });
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('SIGINT reçu, arrêt gracieux...');
   HooksService.stop();
   GmailPollingService.stop();
   TimerService.stopAll();
+  
+  const pool = (await import('./config/database')).default;
+  await pool.end();
+  console.log('Database pool closed');
+  
   process.exit(0);
 });

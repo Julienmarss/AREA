@@ -1,7 +1,7 @@
 export const GITHUB_SCOPES = [
-  'repo',           // Accès complet aux repos publics et privés
-  'read:user',      // Lire les infos du profil
-  'user:email',     // Lire l'email
+  'repo',
+  'read:user',
+  'user:email',
 ];
 
 export const getGitHubAuthUrl = (state: string) => {

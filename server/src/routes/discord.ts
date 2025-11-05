@@ -1,4 +1,3 @@
-// server/src/routes/discord.ts
 import { Router, Request, Response } from 'express';
 import { body, param, validationResult } from 'express-validator';
 import { DiscordService } from '../services/DiscordService';
@@ -9,21 +8,15 @@ import { userStorage } from '../storage/UserStorage';
 const router = Router();
 const discordService = new DiscordService();
 
-// ============= OAUTH2 ROUTES =============
 
-// Initier l'OAuth2
 router.get('/oauth/authorize', DiscordController.initiateAuth);
 
-// Callback OAuth2
 router.get('/oauth/callback', DiscordController.callback);
 
-// Vérifier le statut de connexion
 router.get('/oauth/status', DiscordController.checkStatus);
 
-// Déconnecter Discord
 router.post('/oauth/disconnect', DiscordController.disconnect);
 
-// ============= SERVICE INFO =============
 
 const handleValidationErrors = (req: Request, res: Response, next: any) => {
   const errors = validationResult(req);
@@ -56,7 +49,6 @@ router.get('/', async (req: Request, res: Response) => {
   }
 });
 
-// ============= LEGACY BOT TOKEN AUTH (OPTIONNEL) =============
 
 router.post('/auth', authenticate, [
   body('botToken').isString().notEmpty().withMessage('Bot token is required'),
@@ -101,7 +93,7 @@ router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
     const userId = req.user!.id;
     const isAuthenticated = await discordService.isAuthenticated(userId);
 
-    const user = userStorage.findById(userId);
+    const user = await userStorage.findById(userId);
     const discordData = user?.services.discord;
 
     res.json({
@@ -116,7 +108,6 @@ router.get('/auth', authenticate, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// ============= ACTIONS =============
 
 router.post('/actions/:actionId/listen', authenticate, [
   param('actionId').isIn(['message_posted_in_channel', 'user_mentioned', 'user_joined_server'])
@@ -182,7 +173,6 @@ router.delete('/actions/:actionId/listen', authenticate, [
   }
 });
 
-// ============= REACTIONS =============
 
 router.post('/reactions/:reactionId/execute', authenticate, [
   param('reactionId').isIn(['send_message_to_channel', 'send_dm', 'add_role_to_user'])
@@ -233,14 +223,13 @@ router.post('/reactions/:reactionId/execute', authenticate, [
   }
 });
 
-// ============= GUILDS =============
 
 router.get('/guilds', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.id;
-    console.log('📋 Fetching guilds for user:', userId);
+    console.log('Fetching guilds for user:', userId);
 
-    const user = userStorage.findById(userId);
+    const user = await userStorage.findById(userId);
     const discordData = user?.services?.discord;
 
     if (!discordData || !discordData.connected) {
@@ -274,14 +263,14 @@ router.get('/guilds', authenticate, async (req: AuthRequest, res: Response) => {
     const guild = client.guilds.cache.get(discordData.guildId);
 
     if (!guild) {
-      console.error('❌ Bot not in user guild:', discordData.guildId);
+      console.error('Bot not in user guild:', discordData.guildId);
       return res.status(404).json({
         error: 'Guild not found',
         message: 'Bot is not in your connected server'
       });
     }
 
-    console.log('✅ Found guild:', guild.name);
+    console.log('Found guild:', guild.name);
 
     res.json({
       guilds: [{
@@ -293,12 +282,11 @@ router.get('/guilds', authenticate, async (req: AuthRequest, res: Response) => {
       }]
     });
   } catch (error) {
-    console.error('❌ Failed to get Discord guilds:', error);
+    console.error('Failed to get Discord guilds:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ============= HELPER FUNCTIONS =============
 
 function validateActionParameters(actionId: string, parameters: any): string | null {
   switch (actionId) {
@@ -367,19 +355,18 @@ function validateReactionParameters(reactionId: string, parameters: any): string
 }
 
 
-// ============= GET CHANNELS D'UN SERVEUR =============
 router.get('/guilds/:guildId/channels', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { guildId } = req.params;
     const userId = req.user!.id;
 
-    console.log('📋 Fetching channels for guild:', guildId, 'user:', userId);
+    console.log('Fetching channels for guild:', guildId, 'user:', userId);
 
-    const user = userStorage.findById(userId);
+    const user = await userStorage.findById(userId);
     const discordData = user?.services?.discord;
 
     if (!discordData || !discordData.connected) {
-      console.error('❌ User not connected to Discord');
+      console.error('User not connected to Discord');
       return res.status(401).json({
         error: 'Not authenticated',
         message: 'User must be authenticated with Discord first'
@@ -387,7 +374,7 @@ router.get('/guilds/:guildId/channels', authenticate, async (req: AuthRequest, r
     }
 
     if (!discordData.guildId) {
-      console.error('❌ No guild associated with user');
+      console.error('No guild associated with user');
       return res.status(400).json({
         error: 'Bad request',
         message: 'No Discord server associated with your account'
@@ -395,7 +382,7 @@ router.get('/guilds/:guildId/channels', authenticate, async (req: AuthRequest, r
     }
 
     if (discordData.guildId !== guildId) {
-      console.error('❌ User not connected to this guild');
+      console.error('User not connected to this guild');
       console.error('   User guild:', discordData.guildId);
       console.error('   Requested guild:', guildId);
       return res.status(403).json({
@@ -408,17 +395,17 @@ router.get('/guilds/:guildId/channels', authenticate, async (req: AuthRequest, r
     const client = getDiscordClient();
 
     if (!client || !client.isReady()) {
-      console.error('❌ Discord bot not ready');
+      console.error('Discord bot not ready');
       return res.status(500).json({ error: 'Discord bot not ready' });
     }
 
     const guild = await client.guilds.fetch(guildId);
     if (!guild) {
-      console.error('❌ Guild not found:', guildId);
+      console.error('Guild not found:', guildId);
       return res.status(404).json({ error: 'Guild not found' });
     }
 
-    console.log('✅ Found guild:', guild.name);
+    console.log('Found guild:', guild.name);
 
     const channels = await guild.channels.fetch();
     
@@ -431,16 +418,15 @@ router.get('/guilds/:guildId/channels', authenticate, async (req: AuthRequest, r
         category: channel.parent?.name,
       }));
 
-    console.log('✅ Found', textChannels.length, 'text channels');
+    console.log('Found', textChannels.length, 'text channels');
 
     res.json({ channels: textChannels });
   } catch (error) {
-    console.error('❌ Failed to get Discord channels:', error);
+    console.error('Failed to get Discord channels:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// ============= GET ROLES D'UN SERVEUR =============
 router.get('/guilds/:guildId/roles', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { guildId } = req.params;

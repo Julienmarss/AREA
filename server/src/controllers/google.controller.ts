@@ -18,8 +18,8 @@ export const initiateGoogleAuth = (req: Request, res: Response) => {
     
     const authUrl = googleService.getAuthUrl(state);
     
-    console.log('🔐 Google OAuth initiated for user:', userId);
-    console.log('📍 Redirect URI:', process.env.GOOGLE_REDIRECT_URI);
+    console.log('Google OAuth initiated for user:', userId);
+    console.log('Redirect URI:', process.env.GOOGLE_REDIRECT_URI);
     
     res.json({ authUrl });
   } catch (error: any) {
@@ -34,18 +34,18 @@ export const initiateGoogleAuth = (req: Request, res: Response) => {
 export const handleGoogleCallback = async (req: Request, res: Response) => {
   const { code, state, error } = req.query;
   
-  console.log('📥 Google callback received');
+  console.log('Google callback received');
   console.log('  Code:', code ? 'present' : 'missing');
   console.log('  State:', state ? 'present' : 'missing');
   console.log('  Error:', error || 'none');
   
   if (error) {
-    console.error('❌ Google OAuth error:', error);
+    console.error('Google OAuth error:', error);
     return res.redirect(`${process.env.FRONTEND_URL}/services?error=${error}`);
   }
   
   if (!code || !state) {
-    console.error('❌ Missing code or state');
+    console.error('Missing code or state');
     return res.redirect(`${process.env.FRONTEND_URL}/services?error=missing_params`);
   }
   
@@ -55,25 +55,25 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
     );
     const userId = stateData.userId;
     
-    console.log('🔐 Exchanging Google code for token...');
+    console.log('Exchanging Google code for token...');
     console.log('  User ID:', userId);
 
     const authData = await googleService.exchangeCode(code as string);
     
-    console.log('✅ Got Google tokens');
+    console.log('Got Google tokens');
     console.log('  Access token:', authData.accessToken ? 'present' : 'missing');
     console.log('  Refresh token:', authData.refreshToken ? 'present' : 'missing');
     console.log('  Email:', authData.email || 'N/A');
 
-    const user = userStorage.findById(userId);
+    const user = await userStorage.findById(userId);
     if (!user) {
-      console.error('❌ User not found in storage:', userId);
+      console.error('User not found in storage:', userId);
       throw new Error('User not found');
     }
     
-    console.log('✅ User found in storage');
+    console.log('User found in storage');
 
-    const updatedUser = userStorage.updateServices(userId, 'google', {
+    const updatedUser = await userStorage.updateServices(userId, 'google', {
       connected: true,
       accessToken: authData.accessToken,
       refreshToken: authData.refreshToken,
@@ -83,18 +83,18 @@ export const handleGoogleCallback = async (req: Request, res: Response) => {
     });
     
     if (!updatedUser) {
-      console.error('❌ Failed to update user services');
+      console.error('Failed to update user services');
       throw new Error('Failed to update services');
     }
     
-    console.log(`✅ Google authenticated for user ${userId}`);
+    console.log(`Google authenticated for user ${userId}`);
     console.log('  Saved data:', updatedUser.services.google ? 'OK' : 'MISSING');
     
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
     return res.redirect(`${frontendUrl}/services?connected=google`);
     
   } catch (error: any) {
-    console.error('❌ Google OAuth callback error:', error.message);
+    console.error('Google OAuth callback error:', error.message);
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
     return res.redirect(`${frontendUrl}/services?error=auth_failed`);
   }
@@ -166,13 +166,13 @@ export const sendEmail = async (req: Request, res: Response) => {
 /**
  * Vérifie l'état de l'authentification Google
  */
-export const getGoogleStatus = (req: Request, res: Response) => {
+export const getGoogleStatus = async (req: Request, res: Response) => {
   try {
     const userId = req.query.userId as string || 'demo_user';
     
     console.log('🔍 Checking Google status for user:', userId);
     
-    const user = userStorage.findById(userId);
+    const user = await userStorage.findById(userId);
     const googleData = user?.services?.google;
     
     console.log('  UserStorage data:', googleData ? 'present' : 'missing');
@@ -205,7 +205,7 @@ export const getGoogleStatus = (req: Request, res: Response) => {
 /**
  * Déconnexion Google
  */
-export const disconnectGoogle = (req: Request, res: Response) => {
+export const disconnectGoogle = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.userId;
     
@@ -213,7 +213,7 @@ export const disconnectGoogle = (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const user = userStorage.findById(userId);
+    const user = await userStorage.findById(userId);
     if (user && user.services?.google) {
       delete user.services.google;
     }

@@ -8,7 +8,6 @@ export abstract class ServiceBase {
     this.config = config;
   }
 
-  // Configuration methods
   getConfig(): ServiceConfig {
     return this.config;
   }
@@ -16,23 +15,18 @@ export abstract class ServiceBase {
   abstract getActions(): ActionConfig[];
   abstract getReactions(): ReactionConfig[];
 
-  // Authentication methods
   abstract authenticate(userId: string, authData: any): Promise<boolean>;
   abstract isAuthenticated(userId: string): Promise<boolean>;
   abstract refreshAuth(userId: string): Promise<boolean>;
 
-  // Service lifecycle methods
   abstract initialize(): Promise<void>;
   abstract destroy(): Promise<void>;
 
-  // Action methods - used to listen for triggers
   abstract startListening(userId: string, actionId: string, parameters: Record<string, any>): Promise<void>;
   abstract stopListening(userId: string, actionId: string): Promise<void>;
 
-  // Reaction methods - used to execute reactions
   abstract executeReaction(reactionId: string, userId: string, parameters: Record<string, any>, triggerData: Record<string, any>): Promise<boolean>;
 
-  // Helper methods
   protected setAuthData(userId: string, authData: ServiceAuthData): void {
     this.authData.set(userId, authData);
   }
@@ -45,7 +39,6 @@ export abstract class ServiceBase {
     this.authData.delete(userId);
   }
 
-  // Event emission for actions
   protected emitActionTrigger(event: ActionTriggerEvent): void {
     console.log(`Action triggered: ${event.serviceId}.${event.actionId} for user ${event.userId}`);
   }

@@ -26,9 +26,7 @@ console.log('🔧 GitHub Config:', {
 
 const githubService = new GitHubService();
 
-// Commandes Discord disponibles
 export const discordCommands = [
-  // Commande pour ajouter un commentaire
   new SlashCommandBuilder()
     .setName('comment')
     .setDescription('Ajouter un commentaire sur une issue ou PR')
@@ -49,7 +47,6 @@ export const discordCommands = [
           { name: 'Pull Request', value: 'pr' }
         )),
 
-  // Commande pour créer une issue
   new SlashCommandBuilder()
     .setName('create-issue')
     .setDescription('Créer une nouvelle issue GitHub')
@@ -70,7 +67,6 @@ export const discordCommands = [
         .setDescription('Utilisateur à assigner (username GitHub)')
         .setRequired(false)),
 
-  // Commande pour lister les branches
   new SlashCommandBuilder()
     .setName('branches')
     .setDescription('Lister les branches du repository')
@@ -79,7 +75,6 @@ export const discordCommands = [
         .setDescription('Nombre de branches à afficher (max 10)')
         .setRequired(false)),
 
-  // Commande pour lister les issues ouvertes
   new SlashCommandBuilder()
     .setName('issues')
     .setDescription('Lister les issues ouvertes')
@@ -88,7 +83,6 @@ export const discordCommands = [
         .setDescription('Nombre d\'issues à afficher (max 10)')
         .setRequired(false)),
 
-  // Commande pour lister les PRs ouvertes
   new SlashCommandBuilder()
     .setName('pulls')
     .setDescription('Lister les pull requests ouvertes')
@@ -97,7 +91,6 @@ export const discordCommands = [
         .setDescription('Nombre de PRs à afficher (max 10)')
         .setRequired(false)),
 
-  // Commande pour fermer une issue
   new SlashCommandBuilder()
     .setName('close-issue')
     .setDescription('Fermer une issue')
@@ -110,7 +103,6 @@ export const discordCommands = [
         .setDescription('Raison de fermeture')
         .setRequired(false)),
 
-  // Commande pour assigner une issue
   new SlashCommandBuilder()
     .setName('assign')
     .setDescription('Assigner une issue à quelqu\'un')
@@ -123,7 +115,6 @@ export const discordCommands = [
         .setDescription('Username GitHub à assigner')
         .setRequired(true)),
 
-  // Commande pour créer une pull request
   new SlashCommandBuilder()
     .setName('create-pr')
     .setDescription('Créer une PR: titre + branche vers main')
@@ -137,12 +128,10 @@ export const discordCommands = [
         .setRequired(true))
 ];
 
-// Gestionnaire des commandes
 export async function handleSlashCommand(interaction: ChatInputCommandInteraction) {
   try {
     const { commandName } = interaction;
 
-    // Déférer la réponse pour les commandes qui peuvent prendre du temps
     await interaction.deferReply();
 
     switch (commandName) {
@@ -178,14 +167,12 @@ export async function handleSlashCommand(interaction: ChatInputCommandInteractio
   }
 }
 
-// Gestion de la commande comment
 async function handleCommentCommand(interaction: ChatInputCommandInteraction) {
   const number = interaction.options.getInteger('number', true);
   const message = interaction.options.getString('message', true);
   const type = interaction.options.getString('type') || 'issue';
 
   try {
-    // Utiliser l'API GitHub pour ajouter le commentaire
     const response = await fetch(
       `https://api.github.com/repos/${GITHUB_CONFIG.OWNER}/${GITHUB_CONFIG.REPO}/issues/${number}/comments`,
       {
@@ -226,7 +213,6 @@ async function handleCommentCommand(interaction: ChatInputCommandInteraction) {
   }
 }
 
-// Gestion de la commande create-issue
 async function handleCreateIssueCommand(interaction: ChatInputCommandInteraction) {
   const title = interaction.options.getString('title', true);
   const description = interaction.options.getString('description') || '';
@@ -301,7 +287,6 @@ async function handleCreateIssueCommand(interaction: ChatInputCommandInteraction
   }
 }
 
-// Gestion de la commande branches
 async function handleListBranchesCommand(interaction: ChatInputCommandInteraction) {
   const limit = Math.min(interaction.options.getInteger('limit') || 10, 15);
 
@@ -351,7 +336,6 @@ async function handleListBranchesCommand(interaction: ChatInputCommandInteractio
   }
 }
 
-// Gestion de la commande close-issue
 async function handleCloseIssueCommand(interaction: ChatInputCommandInteraction) {
   const number = interaction.options.getInteger('number', true);
   const reason = interaction.options.getString('reason') || 'Fermée via Discord';
@@ -378,7 +362,6 @@ async function handleCloseIssueCommand(interaction: ChatInputCommandInteraction)
       throw new Error(`Erreur GitHub API: ${error.message || response.statusText}`);
     }
 
-    // Ajouter un commentaire de fermeture
     await fetch(
       `https://api.github.com/repos/${GITHUB_CONFIG.OWNER}/${GITHUB_CONFIG.REPO}/issues/${number}/comments`,
       {
@@ -411,7 +394,6 @@ async function handleCloseIssueCommand(interaction: ChatInputCommandInteraction)
   }
 }
 
-// Gestion de la commande assign
 async function handleAssignCommand(interaction: ChatInputCommandInteraction) {
   const number = interaction.options.getInteger('number', true);
   const user = interaction.options.getString('user', true);
@@ -452,14 +434,12 @@ async function handleAssignCommand(interaction: ChatInputCommandInteraction) {
   }
 }
 
-// Gestion de la commande create-pr (ultra simplifiée)
 async function handleCreatePRCommand(interaction: ChatInputCommandInteraction) {
   const title = interaction.options.getString('title', true);
   const head = interaction.options.getString('branch', true);
-  const base = 'main'; // Toujours vers main
+  const base = 'main';
 
   try {
-    // Vérifier que la branche source existe
     const branchResponse = await fetch(
       `https://api.github.com/repos/${GITHUB_CONFIG.OWNER}/${GITHUB_CONFIG.REPO}/branches/${head}`,
       {
@@ -477,7 +457,6 @@ async function handleCreatePRCommand(interaction: ChatInputCommandInteraction) {
       return;
     }
 
-    // Créer la PR
     const prData = {
       title: title,
       head: head,
@@ -546,7 +525,6 @@ async function handleCreatePRCommand(interaction: ChatInputCommandInteraction) {
   }
 }
 
-// Gestion de la commande issues
 async function handleListIssuesCommand(interaction: ChatInputCommandInteraction) {
   const limit = Math.min(interaction.options.getInteger('limit') || 5, 10);
 
@@ -597,7 +575,6 @@ async function handleListIssuesCommand(interaction: ChatInputCommandInteraction)
   }
 }
 
-// Gestion de la commande pulls
 async function handleListPRsCommand(interaction: ChatInputCommandInteraction) {
   const limit = Math.min(interaction.options.getInteger('limit') || 5, 10);
 
